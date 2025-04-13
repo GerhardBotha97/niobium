@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ConfigProvider, CommandConfig } from './configProvider';
 import { CommandRunner } from './commandRunner';
 import { DockerRunner } from './dockerRunner';
+import { DashboardPanel } from './ui/dashboardPanel';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Blue Wasp Runner is now active!');
@@ -10,12 +11,47 @@ export function activate(context: vscode.ExtensionContext) {
   const commandRunner = new CommandRunner(context);
   const dockerRunner = new DockerRunner(context);
 
+  // Initialize the dashboard panel
+  DashboardPanel.initialize(context);
+
+  // Create and configure status bar item
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  statusBarItem.text = "$(bug) BlueWasp";
+  statusBarItem.tooltip = "Open BlueWasp Dashboard";
+  statusBarItem.command = 'bluewasp-runner.showDashboard';
+  statusBarItem.show();
+  
+  // Register the status bar command to show the dashboard
+  const showDashboard = vscode.commands.registerCommand('bluewasp-runner.showDashboard', () => {
+    try {
+      // Try to show the dashboard, this will create a new one if needed
+      const dashboard = DashboardPanel.show(context);
+      
+      // If the dashboard couldn't be created, show an error
+      if (!dashboard) {
+        vscode.window.showErrorMessage('Could not open Blue Wasp Dashboard. Please try again.');
+      }
+    } catch (error) {
+      // Handle any errors
+      const errorMessage = `Error showing dashboard: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(errorMessage);
+      vscode.window.showErrorMessage(errorMessage);
+    }
+  });
+
+  // Register command to clear activity history
+  const clearActivities = vscode.commands.registerCommand('bluewasp-runner.clearActivities', () => {
+    DashboardPanel.clearActivities();
+    vscode.window.showInformationMessage('Activity history cleared');
+  });
+
   // Register command to run individual commands
   const runCommand = vscode.commands.registerCommand('bluewasp-runner.run', async () => {
     try {
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders) {
         vscode.window.showErrorMessage('No workspace folder open');
+        vscode.commands.executeCommand('runCommand.complete', false, 'No workspace folder open');
         return;
       }
 
@@ -24,6 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
       
       if (!config) {
         vscode.window.showErrorMessage('No valid .bluewasp.yml configuration found');
+        vscode.commands.executeCommand('runCommand.complete', false, 'No valid configuration found');
         return;
       }
 
@@ -38,15 +75,20 @@ export function activate(context: vscode.ExtensionContext) {
       });
 
       if (!selectedCommand) {
+        vscode.commands.executeCommand('runCommand.complete', false, 'Command selection canceled');
         return; // User cancelled
       }
 
       const command = config.commands.find(cmd => cmd.name === selectedCommand.label);
       if (command) {
-        await commandRunner.runCommand(command, rootPath);
+        const result = await commandRunner.runCommand(command, rootPath);
+        vscode.commands.executeCommand('runCommand.complete', result.success, 
+          result.success ? `Command ${command.name} executed successfully` : `Command ${command.name} failed: ${result.error}`);
       }
     } catch (error) {
-      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      vscode.window.showErrorMessage(errorMessage);
+      vscode.commands.executeCommand('runCommand.complete', false, errorMessage);
     }
   });
 
@@ -56,6 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders) {
         vscode.window.showErrorMessage('No workspace folder open');
+        vscode.commands.executeCommand('runStage.complete', false, 'No workspace folder open');
         return;
       }
 
@@ -63,7 +106,9 @@ export function activate(context: vscode.ExtensionContext) {
       const config = await configProvider.loadConfig(rootPath);
       
       if (!config || !config.stages || config.stages.length === 0) {
-        vscode.window.showErrorMessage('No valid stages found in .bluewasp.yml configuration');
+        const errorMsg = 'No valid stages found in .bluewasp.yml configuration';
+        vscode.window.showErrorMessage(errorMsg);
+        vscode.commands.executeCommand('runStage.complete', false, errorMsg);
         return;
       }
 
@@ -78,12 +123,17 @@ export function activate(context: vscode.ExtensionContext) {
       });
 
       if (!selectedStage) {
+        vscode.commands.executeCommand('runStage.complete', false, 'Stage selection canceled');
         return; // User cancelled
       }
 
-      await commandRunner.runStage(config, selectedStage.label, rootPath);
+      const result = await commandRunner.runStage(config, selectedStage.label, rootPath);
+      vscode.commands.executeCommand('runStage.complete', result.success, 
+        result.success ? `Stage ${selectedStage.label} executed successfully` : `Stage ${selectedStage.label} failed: ${result.error}`);
     } catch (error) {
-      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      vscode.window.showErrorMessage(errorMessage);
+      vscode.commands.executeCommand('runStage.complete', false, errorMessage);
     }
   });
 
@@ -93,6 +143,7 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders) {
         vscode.window.showErrorMessage('No workspace folder open');
+        vscode.commands.executeCommand('runSequence.complete', false, 'No workspace folder open');
         return;
       }
 
@@ -100,7 +151,9 @@ export function activate(context: vscode.ExtensionContext) {
       const config = await configProvider.loadConfig(rootPath);
       
       if (!config || !config.sequences || config.sequences.length === 0) {
-        vscode.window.showErrorMessage('No valid sequences found in .bluewasp.yml configuration');
+        const errorMsg = 'No valid sequences found in .bluewasp.yml configuration';
+        vscode.window.showErrorMessage(errorMsg);
+        vscode.commands.executeCommand('runSequence.complete', false, errorMsg);
         return;
       }
 
@@ -115,12 +168,17 @@ export function activate(context: vscode.ExtensionContext) {
       });
 
       if (!selectedSequence) {
+        vscode.commands.executeCommand('runSequence.complete', false, 'Sequence selection canceled');
         return; // User cancelled
       }
 
-      await commandRunner.runSequence(config, selectedSequence.label, rootPath);
+      const result = await commandRunner.runSequence(config, selectedSequence.label, rootPath);
+      vscode.commands.executeCommand('runSequence.complete', result.success, 
+        result.success ? `Sequence ${selectedSequence.label} executed successfully` : `Sequence ${selectedSequence.label} failed: ${result.error}`);
     } catch (error) {
-      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      vscode.window.showErrorMessage(errorMessage);
+      vscode.commands.executeCommand('runSequence.complete', false, errorMessage);
     }
   });
 
@@ -206,6 +264,7 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders) {
         vscode.window.showErrorMessage('No workspace folder open');
+        vscode.commands.executeCommand('runContainer.complete', false, 'No workspace folder open');
         return;
       }
 
@@ -213,7 +272,9 @@ export function activate(context: vscode.ExtensionContext) {
       const config = await configProvider.loadConfig(rootPath);
       
       if (!config || !config.containers || config.containers.length === 0) {
-        vscode.window.showErrorMessage('No valid containers found in .bluewasp.yml configuration');
+        const errorMsg = 'No valid containers found in .bluewasp.yml configuration';
+        vscode.window.showErrorMessage(errorMsg);
+        vscode.commands.executeCommand('runContainer.complete', false, errorMsg);
         return;
       }
 
@@ -228,15 +289,20 @@ export function activate(context: vscode.ExtensionContext) {
       });
 
       if (!selectedContainer) {
+        vscode.commands.executeCommand('runContainer.complete', false, 'Container selection canceled');
         return; // User cancelled
       }
 
       const container = config.containers.find(c => c.name === selectedContainer.label);
       if (container) {
-        await dockerRunner.startContainer(container, rootPath);
+        const result = await dockerRunner.startContainer(container, rootPath);
+        vscode.commands.executeCommand('runContainer.complete', result.success, 
+          result.success ? `Container ${container.name} started successfully` : `Failed to start container ${container.name}: ${result.error}`);
       }
     } catch (error) {
-      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      vscode.window.showErrorMessage(errorMessage);
+      vscode.commands.executeCommand('runContainer.complete', false, errorMessage);
     }
   });
 
@@ -475,6 +541,8 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(
+    statusBarItem,
+    showDashboard,
     runCommand, 
     runStage, 
     runSequence, 
@@ -486,7 +554,8 @@ export function activate(context: vscode.ExtensionContext) {
     viewContainerLogs, 
     removeContainer, 
     showDockerOutput,
-    addDockerContainer
+    addDockerContainer,
+    clearActivities
   );
 }
 

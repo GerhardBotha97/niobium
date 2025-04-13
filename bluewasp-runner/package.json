@@ -28,6 +28,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "bluewasp-runner.showDashboard",
+        "title": "Blue Wasp: Show Dashboard"
+      },
+      {
         "command": "bluewasp-runner.run",
         "title": "Blue Wasp: Run Command"
       },
