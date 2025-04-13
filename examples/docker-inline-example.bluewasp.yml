@@ -1,0 +1,31 @@
+commands:
+  - name: hello
+    description: Print a hello message
+    command: echo "Hello, World!"
+
+# Define stages with inline Docker commands
+stages:
+  - name: test-inline-docker
+    description: Test using inline Docker commands
+    commands:
+      # Regular command
+      - name: hello
+        command: echo "Running inline commands"
+      
+      # Inline Docker command
+      - name: python-inline
+        description: Run Python script inline
+        image: python
+        image_tag: 3.9-alpine
+        volumes:
+          - source: ./scripts
+            target: /app
+        workdir: /app
+        command: python -c 'print("Hello from inline Python container")'
+        remove_after_run: true
+      
+      # Cleanup is now unnecessary since we added remove_after_run: true
+      # but included for backward compatibility with your existing example
+      - name: cleanup-inline
+        command: docker stop python-inline
+        allow_failure: true 

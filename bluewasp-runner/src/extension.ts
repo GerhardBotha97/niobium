@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import { ConfigProvider, CommandConfig } from './configProvider';
 import { CommandRunner } from './commandRunner';
+import { DockerRunner } from './dockerRunner';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Blue Wasp Runner is now active!');
 
   const configProvider = new ConfigProvider();
-  const commandRunner = new CommandRunner();
+  const commandRunner = new CommandRunner(context);
+  const dockerRunner = new DockerRunner(context);
 
   // Register command to run individual commands
   const runCommand = vscode.commands.registerCommand('bluewasp-runner.run', async () => {
@@ -144,7 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
         ...(config.commands || []).map(cmd => ({
           label: cmd.name,
           description: cmd.description || '',
-          detail: 'Command'
+          detail: cmd.image ? 'Docker Command' : 'Command'
         })),
         ...(config.stages || []).map(stage => ({
           label: stage.name,
@@ -172,7 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       // Run the selected item based on its type
-      if (selectedItem.detail === 'Command') {
+      if (selectedItem.detail === 'Command' || selectedItem.detail === 'Docker Command') {
         const command = config.commands.find(cmd => cmd.name === selectedItem.label);
         if (command) {
           await commandRunner.runCommand(command, rootPath);
@@ -192,7 +194,300 @@ export function activate(context: vscode.ExtensionContext) {
     commandRunner.showOutput();
   });
 
-  context.subscriptions.push(runCommand, runStage, runSequence, runAll, showOutput);
+  // Register command to show the WebView job visualization panel
+  const showJobVisualizer = vscode.commands.registerCommand('bluewasp-runner.showJobVisualizer', () => {
+    // This will show the WebView panel through the JobOutputService
+    commandRunner.showOutput();
+  });
+
+  // Register command to run Docker containers
+  const runContainer = vscode.commands.registerCommand('bluewasp-runner.runContainer', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      const config = await configProvider.loadConfig(rootPath);
+      
+      if (!config || !config.containers || config.containers.length === 0) {
+        vscode.window.showErrorMessage('No valid containers found in .bluewasp.yml configuration');
+        return;
+      }
+
+      const containerOptions = config.containers.map(container => ({
+        label: container.name,
+        description: container.description || `${container.image}${container.tag ? `:${container.tag}` : ''}`,
+        detail: 'Container'
+      }));
+
+      const selectedContainer = await vscode.window.showQuickPick(containerOptions, {
+        placeHolder: 'Select a container to run'
+      });
+
+      if (!selectedContainer) {
+        return; // User cancelled
+      }
+
+      const container = config.containers.find(c => c.name === selectedContainer.label);
+      if (container) {
+        await dockerRunner.startContainer(container, rootPath);
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  // Register command to stop Docker containers
+  const stopContainer = vscode.commands.registerCommand('bluewasp-runner.stopContainer', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      const config = await configProvider.loadConfig(rootPath);
+      
+      if (!config || !config.containers || config.containers.length === 0) {
+        vscode.window.showErrorMessage('No valid containers found in .bluewasp.yml configuration');
+        return;
+      }
+
+      const containerOptions = config.containers.map(container => ({
+        label: container.name,
+        description: container.description || `${container.image}${container.tag ? `:${container.tag}` : ''}`,
+        detail: 'Container'
+      }));
+
+      const selectedContainer = await vscode.window.showQuickPick(containerOptions, {
+        placeHolder: 'Select a container to stop'
+      });
+
+      if (!selectedContainer) {
+        return; // User cancelled
+      }
+
+      await dockerRunner.stopContainer(selectedContainer.label);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  // Register command to view Docker container logs
+  const viewContainerLogs = vscode.commands.registerCommand('bluewasp-runner.viewContainerLogs', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      const config = await configProvider.loadConfig(rootPath);
+      
+      if (!config || !config.containers || config.containers.length === 0) {
+        vscode.window.showErrorMessage('No valid containers found in .bluewasp.yml configuration');
+        return;
+      }
+
+      const containerOptions = config.containers.map(container => ({
+        label: container.name,
+        description: container.description || `${container.image}${container.tag ? `:${container.tag}` : ''}`,
+        detail: 'Container'
+      }));
+
+      const selectedContainer = await vscode.window.showQuickPick(containerOptions, {
+        placeHolder: 'Select a container to view logs'
+      });
+
+      if (!selectedContainer) {
+        return; // User cancelled
+      }
+
+      await dockerRunner.showContainerLogs(selectedContainer.label);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  // Register command to remove Docker containers
+  const removeContainer = vscode.commands.registerCommand('bluewasp-runner.removeContainer', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      const config = await configProvider.loadConfig(rootPath);
+      
+      if (!config || !config.containers || config.containers.length === 0) {
+        vscode.window.showErrorMessage('No valid containers found in .bluewasp.yml configuration');
+        return;
+      }
+
+      const containerOptions = config.containers.map(container => ({
+        label: container.name,
+        description: container.description || `${container.image}${container.tag ? `:${container.tag}` : ''}`,
+        detail: 'Container'
+      }));
+
+      const selectedContainer = await vscode.window.showQuickPick(containerOptions, {
+        placeHolder: 'Select a container to remove'
+      });
+
+      if (!selectedContainer) {
+        return; // User cancelled
+      }
+
+      await dockerRunner.removeContainer(selectedContainer.label);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  // Register command to show Docker output channel
+  const showDockerOutput = vscode.commands.registerCommand('bluewasp-runner.showDockerOutput', () => {
+    dockerRunner.showOutput();
+  });
+
+  // Register command to add a new Docker container configuration
+  const addDockerContainer = vscode.commands.registerCommand('bluewasp-runner.addDockerContainer', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      
+      // Prompt for container information
+      const name = await vscode.window.showInputBox({
+        prompt: 'Enter container name',
+        placeHolder: 'e.g., postgres-db'
+      });
+      
+      if (!name) {
+        return; // User cancelled
+      }
+      
+      const description = await vscode.window.showInputBox({
+        prompt: 'Enter container description (optional)',
+        placeHolder: 'e.g., PostgreSQL database container'
+      });
+      
+      const image = await vscode.window.showInputBox({
+        prompt: 'Enter container image',
+        placeHolder: 'e.g., postgres',
+        validateInput: (value) => {
+          return value ? null : 'Image is required';
+        }
+      });
+      
+      if (!image) {
+        return; // User cancelled
+      }
+      
+      const tag = await vscode.window.showInputBox({
+        prompt: 'Enter image tag (optional)',
+        placeHolder: 'e.g., latest, 13, 3.9-alpine'
+      });
+      
+      const portMapping = await vscode.window.showInputBox({
+        prompt: 'Enter port mapping (optional)',
+        placeHolder: 'hostPort:containerPort, e.g., 5432:5432'
+      });
+      
+      // Generate YAML
+      let yamlContent = `
+# Docker container configuration
+- name: ${name}
+  description: ${description || ''}
+  image: ${image}${tag ? `\n  tag: ${tag}` : ''}`;
+      
+      if (portMapping) {
+        const [host, container] = portMapping.split(':');
+        yamlContent += `
+  ports:
+    - host: ${host}
+      container: ${container}`;
+      }
+      
+      // Ask if they want to add environment variables
+      const addEnv = await vscode.window.showQuickPick(['Yes', 'No'], {
+        placeHolder: 'Do you want to add environment variables?'
+      });
+      
+      if (addEnv === 'Yes') {
+        yamlContent += `
+  environment:
+    # Add your environment variables here
+    # KEY: value`;
+      }
+      
+      // Ask if they want to add volumes
+      const addVolumes = await vscode.window.showQuickPick(['Yes', 'No'], {
+        placeHolder: 'Do you want to add volume mappings?'
+      });
+      
+      if (addVolumes === 'Yes') {
+        yamlContent += `
+  volumes:
+    - source: ./data
+      target: /data
+      # readonly: true # Uncomment to make readonly`;
+      }
+      
+      // Ask for restart policy
+      const restartPolicy = await vscode.window.showQuickPick(['no', 'always', 'on-failure', 'unless-stopped'], {
+        placeHolder: 'Select a restart policy'
+      });
+      
+      if (restartPolicy) {
+        yamlContent += `
+  restart_policy: ${restartPolicy}`;
+      }
+      
+      // Create a new file with the container configuration
+      const fileName = `${name}-container-config.yml`;
+      const filePath = vscode.Uri.file(`${rootPath}/${fileName}`);
+      
+      await vscode.workspace.fs.writeFile(
+        filePath,
+        Buffer.from(yamlContent)
+      );
+      
+      // Open the file
+      const document = await vscode.workspace.openTextDocument(filePath);
+      await vscode.window.showTextDocument(document);
+      
+      vscode.window.showInformationMessage(`Docker container configuration created: ${fileName}`);
+      vscode.window.showInformationMessage('Add this configuration to your .bluewasp.yml file under the "containers" section.');
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  context.subscriptions.push(
+    runCommand, 
+    runStage, 
+    runSequence, 
+    runAll, 
+    showOutput, 
+    showJobVisualizer, 
+    runContainer, 
+    stopContainer, 
+    viewContainerLogs, 
+    removeContainer, 
+    showDockerOutput,
+    addDockerContainer
+  );
 }
 
 export function deactivate() {} 

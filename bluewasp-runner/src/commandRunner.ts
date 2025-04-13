@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
-import { CommandConfig, StageConfig, ConfigProvider, BlueWaspConfig } from './configProvider';
+import { CommandConfig, StageConfig, ConfigProvider, BlueWaspConfig, DockerContainerConfig } from './configProvider';
 import { promisify } from 'util';
+import { JobOutputService } from './ui/jobOutputService';
+import { DockerRunner } from './dockerRunner';
 
 const execAsync = promisify(cp.exec);
 
@@ -18,13 +20,23 @@ export class CommandRunner {
   private terminal: vscode.Terminal | undefined;
   private configProvider: ConfigProvider;
   private outputChannel: vscode.OutputChannel;
+  private jobOutputService: JobOutputService;
+  private dockerRunner: DockerRunner;
 
-  constructor() {
+  constructor(context?: vscode.ExtensionContext) {
     this.configProvider = new ConfigProvider();
     this.outputChannel = vscode.window.createOutputChannel('Blue Wasp Runner');
+    this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
+    this.dockerRunner = new DockerRunner(context);
   }
 
   async runCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
+    // If the command has an image property, run it as a Docker container
+    if (command.image) {
+      return this.runDockerCommand(command, workspaceRoot);
+    }
+
+    // Otherwise, run it as a regular command
     // Show output channel
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Command] Running: ${command.name}`);
@@ -52,6 +64,13 @@ export class CommandRunner {
     const startTime = new Date();
     this.outputChannel.appendLine(`Starting at: ${startTime.toLocaleTimeString()}`);
     
+    // Create job in web view if JobOutputService is available
+    let jobId: string | undefined;
+    if (this.jobOutputService) {
+      this.jobOutputService.showPanel();
+      jobId = this.jobOutputService.startCommand(command);
+    }
+
     // Execute the command with output
     try {
       // Determine the working directory
@@ -98,11 +117,21 @@ export class CommandRunner {
       if (stdout) {
         this.outputChannel.appendLine('\n[OUTPUT]');
         this.outputChannel.appendLine(stdout);
+        
+        // Add output to WebView if available
+        if (jobId) {
+          this.jobOutputService.appendOutput(jobId, stdout);
+        }
       }
       
       if (stderr) {
         this.outputChannel.appendLine('\n[STDERR]');
         this.outputChannel.appendLine(stderr);
+        
+        // Add error to WebView if available
+        if (jobId) {
+          this.jobOutputService.appendError(jobId, stderr);
+        }
       }
       
       // Record end time
@@ -114,6 +143,11 @@ export class CommandRunner {
       this.outputChannel.appendLine('─'.repeat(80)); // Separator line
       
       vscode.window.showInformationMessage(`Command completed successfully: ${command.name}`);
+      
+      // Mark job as complete in WebView if available
+      if (jobId) {
+        this.jobOutputService.completeJobSuccess(jobId);
+      }
       
       // Return successful result
       return {
@@ -131,10 +165,20 @@ export class CommandRunner {
       if (stdout) {
         this.outputChannel.appendLine('\n[OUTPUT]');
         this.outputChannel.appendLine(stdout);
+        
+        // Add output to WebView if available
+        if (jobId) {
+          this.jobOutputService.appendOutput(jobId, stdout);
+        }
       }
       
       this.outputChannel.appendLine('\n[ERROR]');
       this.outputChannel.appendLine(stderr);
+      
+      // Add error to WebView if available
+      if (jobId) {
+        this.jobOutputService.appendError(jobId, stderr);
+      }
       
       // Record end time
       const endTime = new Date();
@@ -148,8 +192,18 @@ export class CommandRunner {
       if (command.allow_failure) {
         this.outputChannel.appendLine(`Command failed but continuing (allow_failure: true)`);
         vscode.window.showWarningMessage(`Command failed but continuing: ${command.name}`);
+        
+        // Mark job as failed in WebView but indicate it's allowed to fail
+        if (jobId) {
+          this.jobOutputService.completeJobFailure(jobId, exitCode);
+        }
       } else {
         vscode.window.showErrorMessage(`Command failed: ${command.name}`);
+        
+        // Mark job as failed in WebView
+        if (jobId) {
+          this.jobOutputService.completeJobFailure(jobId, exitCode);
+        }
       }
       
       // Return failed result
@@ -186,11 +240,24 @@ export class CommandRunner {
     
     vscode.window.showInformationMessage(`Running stage: ${stage.name}`);
     
+    // Create stage job in WebView if JobOutputService is available
+    let stageJobId: string | undefined;
+    if (this.jobOutputService) {
+      this.jobOutputService.showPanel();
+      stageJobId = this.jobOutputService.startStage(stage);
+    }
+    
     const commands = this.configProvider.getStageCommands(config, stageName);
     if (commands.length === 0) {
       const warningMsg = `No valid commands found in stage "${stageName}"`;
       this.outputChannel.appendLine(`[WARNING] ${warningMsg}`);
       vscode.window.showWarningMessage(warningMsg);
+      
+      if (stageJobId) {
+        this.jobOutputService.appendOutput(stageJobId, `Warning: ${warningMsg}`);
+        this.jobOutputService.completeJobFailure(stageJobId);
+      }
+      
       return { success: false, output: '', error: warningMsg };
     }
 
@@ -208,8 +275,20 @@ export class CommandRunner {
       commandIndex++;
       this.outputChannel.appendLine(`\n[${commandIndex}/${commands.length}] Executing command: ${command.name}`);
       
+      // Run command and link to parent stage in WebView
       const result = await this.runCommand(command, workspaceRoot);
       combinedOutput += result.output + '\n';
+      
+      // If this command had a WebView job, add it as child of the stage
+      if (stageJobId && this.jobOutputService) {
+        // Get the command's job ID from active jobs
+        const commandJob = [...this.jobOutputService['activeJobs'].values()]
+          .find(job => job.type === 'command' && job.name === command.name);
+        
+        if (commandJob) {
+          this.jobOutputService.addChildJob(stageJobId, commandJob.id);
+        }
+      }
       
       // If the command failed and doesn't allow failure, stop the stage
       if (!result.success && !command.allow_failure) {
@@ -237,13 +316,31 @@ export class CommandRunner {
       if (stage.allow_failure) {
         this.outputChannel.appendLine(`Stage failed but continuing (allow_failure: true)`);
         vscode.window.showWarningMessage(`Stage failed but continuing: ${stage.name}`);
+        
+        // Mark stage as failed in WebView but indicate it's allowed to fail
+        if (stageJobId) {
+          this.jobOutputService.completeJobFailure(stageJobId);
+        }
+        
         return { success: true, output: combinedOutput };
       } else {
         vscode.window.showErrorMessage(`Stage failed: ${stage.name}`);
+        
+        // Mark stage as failed in WebView
+        if (stageJobId) {
+          this.jobOutputService.completeJobFailure(stageJobId);
+        }
+        
         return { success: false, output: combinedOutput, error: 'Stage execution failed' };
       }
     } else {
       vscode.window.showInformationMessage(`Stage completed successfully: ${stage.name}`);
+      
+      // Mark stage as successful in WebView
+      if (stageJobId) {
+        this.jobOutputService.completeJobSuccess(stageJobId);
+      }
+      
       return { success: true, output: combinedOutput };
     }
   }
@@ -269,11 +366,24 @@ export class CommandRunner {
     
     vscode.window.showInformationMessage(`Running sequence: ${sequence.name}`);
     
+    // Create sequence job in WebView if JobOutputService is available
+    let sequenceJobId: string | undefined;
+    if (this.jobOutputService) {
+      this.jobOutputService.showPanel();
+      sequenceJobId = this.jobOutputService.startSequence(sequence.name, sequence.description);
+    }
+    
     const stages = this.configProvider.getSequenceStages(config, sequenceName);
     if (stages.length === 0) {
       const warningMsg = `No valid stages found in sequence "${sequenceName}"`;
       this.outputChannel.appendLine(`[WARNING] ${warningMsg}`);
       vscode.window.showWarningMessage(warningMsg);
+      
+      if (sequenceJobId) {
+        this.jobOutputService.appendOutput(sequenceJobId, `Warning: ${warningMsg}`);
+        this.jobOutputService.completeJobFailure(sequenceJobId);
+      }
+      
       return { success: false, output: '', error: warningMsg };
     }
 
@@ -293,6 +403,17 @@ export class CommandRunner {
       
       const result = await this.runStage(config, stage.name, workspaceRoot);
       combinedOutput += result.output + '\n';
+      
+      // If this stage had a WebView job, add it as child of the sequence
+      if (sequenceJobId && this.jobOutputService) {
+        // Get the stage's job ID from active jobs
+        const stageJob = [...this.jobOutputService['activeJobs'].values()]
+          .find(job => job.type === 'stage' && job.name === stage.name);
+        
+        if (stageJob) {
+          this.jobOutputService.addChildJob(sequenceJobId, stageJob.id);
+        }
+      }
       
       // If the stage failed and doesn't have allow_failure, stop the sequence
       if (!result.success) {
@@ -315,9 +436,21 @@ export class CommandRunner {
 
     if (sequenceSuccess) {
       vscode.window.showInformationMessage(`Sequence completed successfully: ${sequence.name}`);
+      
+      // Mark sequence as successful in WebView
+      if (sequenceJobId) {
+        this.jobOutputService.completeJobSuccess(sequenceJobId);
+      }
+      
       return { success: true, output: combinedOutput };
     } else {
       vscode.window.showErrorMessage(`Sequence failed: ${sequence.name}`);
+      
+      // Mark sequence as failed in WebView
+      if (sequenceJobId) {
+        this.jobOutputService.completeJobFailure(sequenceJobId);
+      }
+      
       return { success: false, output: combinedOutput, error: 'Sequence execution failed' };
     }
   }
@@ -325,5 +458,79 @@ export class CommandRunner {
   // Method to explicitly show the output channel
   showOutput(): void {
     this.outputChannel.show(true);
+    
+    // Also show the WebView panel if it exists
+    if (this.jobOutputService) {
+      this.jobOutputService.showPanel();
+    }
+  }
+
+  /**
+   * Run a command as a Docker container
+   */
+  private async runDockerCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
+    // Show output channel
+    this.outputChannel.show(true);
+    this.outputChannel.appendLine(`\n[Docker Command] Running: ${command.name}`);
+    if (command.description) {
+      this.outputChannel.appendLine(`Description: ${command.description}`);
+    }
+    this.outputChannel.appendLine(`Image: ${command.image}${command.image_tag ? `:${command.image_tag}` : ''}`);
+    
+    // Create a Docker container config from the command
+    const containerConfig: DockerContainerConfig = {
+      name: command.container_name || `bluewasp-${command.name}-${Date.now()}`,
+      description: command.description,
+      image: command.image!, // Using non-null assertion as we've validated this exists
+      tag: command.image_tag,
+      command: command.command,
+      ports: command.ports,
+      volumes: command.volumes,
+      workdir: command.workdir,
+      network: command.network,
+      entrypoint: command.entrypoint,
+      environment: command.env,
+      remove_when_stopped: command.remove_after_run
+    };
+    
+    try {
+      // Start the container
+      const result = await this.dockerRunner.startContainer(containerConfig, workspaceRoot);
+      
+      // If configured to remove after run and it was successful, remove the container
+      if (command.remove_after_run && result.success && result.containerId) {
+        await this.dockerRunner.removeContainer(containerConfig.name);
+      }
+      
+      return {
+        success: result.success,
+        output: result.output,
+        error: result.error,
+        exitCode: result.statusCode || 0
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (command.allow_failure) {
+        this.outputChannel.appendLine(`Command failed but continuing (allow_failure: true)`);
+        vscode.window.showWarningMessage(`Docker command failed but continuing: ${command.name}`);
+        
+        return {
+          success: true, // Mark as successful since failure is allowed
+          output: '',
+          error: errorMessage,
+          exitCode: 0
+        };
+      } else {
+        vscode.window.showErrorMessage(`Docker command failed: ${command.name}`);
+        
+        return {
+          success: false,
+          output: '',
+          error: errorMessage,
+          exitCode: 1
+        };
+      }
+    }
   }
 } 

@@ -1,5 +1,8 @@
 const path = require('path');
 
+/**
+ * @type {import('webpack').Configuration}
+ */
 module.exports = {
   entry: './src/extension.ts',
   target: 'node',
@@ -11,7 +14,12 @@ module.exports = {
   },
   devtool: 'source-map',
   externals: {
-    vscode: 'commonjs vscode'
+    vscode: 'commonjs vscode',
+    // Add external packages with binary dependencies
+    dockerode: 'commonjs dockerode',
+    'cpu-features': 'commonjs cpu-features',
+    ssh2: 'commonjs ssh2',
+    'docker-modem': 'commonjs docker-modem'
   },
   resolve: {
     extensions: ['.ts', '.js']
@@ -28,5 +36,14 @@ module.exports = {
         ]
       }
     ]
-  }
+  },
+  // Ignore warnings about these modules
+  ignoreWarnings: [
+    {
+      module: /cpu-features/
+    },
+    {
+      module: /ssh2/
+    }
+  ]
 }; 

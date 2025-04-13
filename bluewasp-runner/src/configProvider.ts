@@ -11,6 +11,16 @@ export interface CommandConfig {
   env?: Record<string, string>;
   shell?: boolean;
   allow_failure?: boolean;
+  // Docker integration
+  image?: string;
+  image_tag?: string;
+  container_name?: string;
+  ports?: DockerPortConfig[];
+  volumes?: DockerVolumeConfig[];
+  workdir?: string;
+  network?: string;
+  entrypoint?: string;
+  remove_after_run?: boolean;
 }
 
 export interface StageConfig {
@@ -26,10 +36,45 @@ export interface SequenceConfig {
   stages: string[];
 }
 
+export interface DockerVolumeConfig {
+  source: string;
+  target: string;
+  readonly?: boolean;
+}
+
+export interface DockerPortConfig {
+  host: number | string;
+  container: number | string;
+}
+
+export interface DockerContainerConfig {
+  name: string;
+  description?: string;
+  image: string;
+  tag?: string;
+  ports?: DockerPortConfig[];
+  volumes?: DockerVolumeConfig[];
+  environment?: Record<string, string>;
+  command?: string;
+  entrypoint?: string;
+  network?: string;
+  workdir?: string;
+  restart_policy?: 'no' | 'always' | 'on-failure' | 'unless-stopped';
+  healthcheck?: {
+    command: string;
+    interval?: string;
+    timeout?: string;
+    retries?: number;
+    start_period?: string;
+  };
+  remove_when_stopped?: boolean;
+}
+
 export interface BlueWaspConfig {
   commands: CommandConfig[];
   stages?: StageConfig[];
   sequences?: SequenceConfig[];
+  containers?: DockerContainerConfig[];
 }
 
 export class ConfigProvider {
@@ -66,8 +111,9 @@ export class ConfigProvider {
         return false;
       }
       
-      if (!cmd.command) {
-        vscode.window.showWarningMessage(`Skipping command "${cmd.name}" with missing command`);
+      // Command can either have a command or an image, but at least one is required
+      if (!cmd.command && !cmd.image) {
+        vscode.window.showWarningMessage(`Skipping command "${cmd.name}" with missing command or image`);
         return false;
       }
       
@@ -104,10 +150,26 @@ export class ConfigProvider {
       return true;
     });
     
+    // Validate Docker containers if present
+    const validContainers = config.containers?.filter(container => {
+      if (!container.name) {
+        vscode.window.showWarningMessage(`Skipping container with missing name`);
+        return false;
+      }
+      
+      if (!container.image) {
+        vscode.window.showWarningMessage(`Skipping container "${container.name}" with missing image`);
+        return false;
+      }
+      
+      return true;
+    });
+    
     return {
       commands: validCommands,
       stages: validStages,
-      sequences: validSequences
+      sequences: validSequences,
+      containers: validContainers
     };
   }
 
@@ -124,6 +186,11 @@ export class ConfigProvider {
   // Helper method to find a sequence by name
   findSequence(config: BlueWaspConfig, sequenceName: string): SequenceConfig | undefined {
     return config.sequences?.find(sequence => sequence.name === sequenceName);
+  }
+  
+  // Helper method to find a container by name
+  findContainer(config: BlueWaspConfig, containerName: string): DockerContainerConfig | undefined {
+    return config.containers?.find(container => container.name === containerName);
   }
 
   // Get all commands for a stage, resolving string references to actual commands
@@ -154,7 +221,7 @@ export class ConfigProvider {
         }
       } else {
         // This is an inline command definition
-        if (cmdItem.name && cmdItem.command) {
+        if ((cmdItem.name && cmdItem.command) || (cmdItem.name && cmdItem.image)) {
           // Inherit allow_failure from stage if not specified in command
           if (stage.allow_failure !== undefined && cmdItem.allow_failure === undefined) {
             commands.push({

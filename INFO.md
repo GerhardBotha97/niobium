@@ -17,6 +17,13 @@ commands:
       KEY2: value2
     allow_failure: false  # Optional: whether the command is allowed to fail
 
+  # Docker command example
+  - name: Docker Command
+    description: Run a command in a Docker container
+    image: node:16-alpine
+    command: node -e "console.log('Hello from Docker')"
+    remove_after_run: true
+
 stages:
   - name: Stage Name
     description: Stage description
@@ -27,6 +34,10 @@ stages:
       - name: Inline Command  # Or define a command inline
         command: echo "Inline command"
         allow_failure: true  # This command can fail without stopping the stage
+      - name: Inline Docker  # Or define a Docker command inline
+        image: python:3.9-alpine
+        command: python -c "print('Hello from Python')"
+        remove_after_run: true
 
 sequences:
   - name: Sequence Name
@@ -34,7 +45,24 @@ sequences:
     stages:
       - Stage Name 1  # Reference to a stage by name
       - Stage Name 2
-```
+
+# Standalone Docker container definitions
+containers:
+  - name: postgres-db
+    description: PostgreSQL database container
+    image: postgres
+    tag: 13
+    ports:
+      - host: 5432
+        container: 5432
+    environment:
+      POSTGRES_PASSWORD: example
+      POSTGRES_USER: postgres
+      POSTGRES_DB: testdb
+    volumes:
+      - source: ./data/postgres
+        target: /var/lib/postgresql/data
+    restart_policy: unless-stopped
 
 ## Command Properties
 
@@ -42,11 +70,25 @@ sequences:
 |----------|----------|-------------|
 | `name` | Yes | The name of the command shown in the quick pick menu |
 | `description` | No | A description of what the command does |
-| `command` | Yes | The actual command to execute |
+| `command` | Yes* | The actual command to execute (*required if not using Docker image) |
 | `cwd` | No | Working directory (relative to workspace root) |
 | `env` | No | Environment variables as key-value pairs |
 | `shell` | No | Whether to run in shell (defaults to true) |
 | `allow_failure` | No | Whether the command is allowed to fail without stopping execution (default: false) |
+
+### Docker Properties in Commands
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `image` | Yes* | Docker image to use (*required for Docker-based commands) |
+| `image_tag` | No | Tag for the Docker image |
+| `container_name` | No | Custom name for the container (auto-generated if not specified) |
+| `ports` | No | Port mappings between host and container |
+| `volumes` | No | Volume mappings between host and container |
+| `workdir` | No | Working directory inside the container |
+| `entrypoint` | No | Entrypoint command for the container |
+| `network` | No | Docker network to connect the container to |
+| `remove_after_run` | No | Whether to remove the container after command completion (default: false) |
 
 ## Stage Properties
 
@@ -64,6 +106,25 @@ sequences:
 | `name` | Yes | The name of the sequence |
 | `description` | No | A description of what the sequence does |
 | `stages` | Yes | Array of stage names to run in order |
+
+## Docker Container Properties
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | The name of the container |
+| `description` | No | A description of what the container does |
+| `image` | Yes | The Docker image to use |
+| `tag` | No | The image tag (default: latest) |
+| `ports` | No | Port mappings between host and container |
+| `volumes` | No | Volume mappings between host and container |
+| `environment` | No | Environment variables as key-value pairs |
+| `command` | No | Command to run inside the container |
+| `entrypoint` | No | Entrypoint command for the container |
+| `workdir` | No | Working directory inside the container |
+| `network` | No | Docker network to connect the container to |
+| `restart_policy` | No | Container restart policy (no, always, on-failure, unless-stopped) |
+| `healthcheck` | No | Health check configuration |
+| `remove_when_stopped` | No | Whether to remove the container after it stops |
 
 ## Failure Handling
 
@@ -152,6 +213,109 @@ stages:
         # Inherits allow_failure: true from the stage
 ```
 
+### Docker Command Examples
+
+```yaml
+commands:
+  # Run a one-off command in a container and remove it after
+  - name: Run Node Script
+    description: Run a Node.js script in a container
+    image: node
+    image_tag: 16-alpine
+    volumes:
+      - source: ./scripts
+        target: /app
+    workdir: /app
+    command: node index.js
+    remove_after_run: true
+  
+  # Run a database container that persists
+  - name: Start Database
+    description: Start a PostgreSQL database
+    image: postgres
+    image_tag: 13-alpine
+    ports:
+      - host: 5432
+        container: 5432
+    env:
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: test
+      POSTGRES_DB: test
+```
+
+### Docker in Stages Example
+
+```yaml
+stages:
+  - name: database-test
+    description: Test with a database
+    commands:
+      # Start a PostgreSQL container
+      - name: postgres-inline
+        description: Start PostgreSQL database
+        image: postgres
+        image_tag: 13-alpine
+        ports:
+          - host: 5432
+            container: 5432
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test
+      
+      # Run tests that connect to the database
+      - name: run-tests
+        command: npm test
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: test
+        
+      # Stop and remove the database container
+      - name: cleanup-postgres
+        command: docker stop postgres-inline && docker rm postgres-inline
+        allow_failure: true
+```
+
+### Standalone Docker Container Example
+
+```yaml
+containers:
+  - name: redis-cache
+    description: Redis cache container
+    image: redis
+    tag: alpine
+    ports:
+      - host: 6379
+        container: 6379
+    volumes:
+      - source: ./data/redis
+        target: /data
+    restart_policy: always
+    command: redis-server --appendonly yes
+    
+  - name: nginx-web
+    description: Nginx web server
+    image: nginx
+    tag: latest
+    ports:
+      - host: 8080
+        container: 80
+    volumes:
+      - source: ./www
+        target: /usr/share/nginx/html
+        readonly: true
+    healthcheck:
+      command: curl --fail http://localhost:80/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart_policy: on-failure
+```
+
 ### Stages Example
 
 Stages allow you to group multiple commands that run in sequence:
@@ -231,11 +395,23 @@ commands:
     env:
       DEPLOY_TARGET: staging
     allow_failure: true  # Deployment can fail without stopping the pipeline
+    
+  - name: Start Database
+    image: postgres
+    image_tag: 13-alpine
+    ports:
+      - host: 5432
+        container: 5432
+    env:
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: test
+      POSTGRES_DB: test
 
 stages:
   - name: Test Stage
     commands:
       - Install Dependencies
+      - Start Database
       - Run Tests
   
   - name: Build Stage
@@ -272,16 +448,34 @@ There are several ways to run your configured items:
    - Type "Blue Wasp: Run Sequence" to run a sequence
    - Type "Blue Wasp: Run (All Types)" to select from all commands, stages, and sequences
    - Type "Blue Wasp: Show Output Panel" to view the execution output
+   - Type "Blue Wasp: Run Docker Container" to start a Docker container
+   - Type "Blue Wasp: Stop Docker Container" to stop a Docker container
+   - Type "Blue Wasp: View Docker Container Logs" to view Docker logs
+   - Type "Blue Wasp: Remove Docker Container" to remove a Docker container
+   - Type "Blue Wasp: Add Docker Container Configuration" to create a new container config
 
 2. Select the command, stage, or sequence from the list that appears
+
+## Docker Container Management
+
+Blue Wasp Runner provides commands for managing Docker containers:
+
+- **Blue Wasp: Run Docker Container**: Start a container defined in the `containers` section
+- **Blue Wasp: Stop Docker Container**: Stop a running container
+- **Blue Wasp: Remove Docker Container**: Remove a container (stopping it first if needed)
+- **Blue Wasp: View Docker Container Logs**: View the logs from a container
+- **Blue Wasp: Show Docker Output**: Show the Docker output panel
+- **Blue Wasp: Add Docker Container Configuration**: Generate a Docker container configuration
 
 ## Output and Execution Details
 
 The extension captures and displays:
 - Command output and errors in the Output panel
+- Docker container output in the Docker Output panel
 - Execution times and exit codes
 - Failure information and handling
 - Progress through stages and sequences
+- Container logs and status information
 
 ## Extension Settings
 
