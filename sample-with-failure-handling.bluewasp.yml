@@ -1,0 +1,93 @@
+# Blue Wasp configuration file with stages, sequences, and failure handling
+
+# Individual commands
+commands:
+  - name: Success Command
+    description: This command will succeed
+    command: echo "This command will succeed"
+  
+  - name: Failing Command
+    description: This command will fail
+    command: some-non-existent-command || exit 1
+  
+  - name: Allowed Failure Command
+    description: This command will fail but is allowed to
+    command: some-non-existent-command || exit 1
+    allow_failure: true
+  
+  - name: Echo Environment
+    description: Echo the environment variables
+    command: env | grep -E "NODE_|PATH"
+  
+  - name: Build Project
+    description: Build the project
+    command: echo "Building project..."
+  
+  - name: Run Tests
+    description: Run tests
+    command: echo "Running tests..."
+  
+  - name: Deploy
+    description: Deploy the application
+    command: echo "Deploying application..."
+
+# Stages group multiple commands together
+stages:
+  # This stage will fail on the second command
+  - name: Normal Stage
+    description: This stage will stop on failure
+    commands:
+      - Success Command
+      - Failing Command  # This will fail and stop the stage
+      - Echo Environment # This won't run
+  
+  # This stage allows individual command failures
+  - name: Mixed Failures Stage
+    description: This stage handles individual command failures
+    commands:
+      - Success Command
+      - Allowed Failure Command  # This will fail but continue
+      - Echo Environment # This will still run
+  
+  # This entire stage is allowed to fail
+  - name: Allow Failure Stage
+    description: This entire stage is allowed to fail
+    allow_failure: true
+    commands:
+      - Success Command
+      - Failing Command  # This will fail but the stage will report success
+      - Echo Environment # This won't run, but the stage will still be considered successful
+  
+  - name: Build And Test
+    description: Build and test the application
+    commands:
+      - Build Project
+      - Run Tests
+  
+  - name: Deployment
+    description: Deploy the application
+    commands:
+      - Build Project
+      - Run Tests
+      - Deploy
+
+# Sequences chain multiple stages together
+sequences:
+  - name: Simple CI/CD
+    description: A simple CI/CD pipeline
+    stages:
+      - Build And Test
+      - Deployment
+  
+  - name: Failure Demo
+    description: Demonstrates failure handling
+    stages:
+      - Normal Stage        # This will fail
+      - Allow Failure Stage # This won't run because the previous stage failed
+  
+  - name: Mixed Failure Demo
+    description: Demonstrates mixed failure handling
+    stages:
+      - Mixed Failures Stage # This will continue despite a command failing
+      - Allow Failure Stage  # This will run and be allowed to fail
+      - Build And Test       # This will run regardless of previous failures 

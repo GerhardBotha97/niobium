@@ -1,0 +1,93 @@
+{
+  "name": "bluewasp-runner",
+  "displayName": "Blue Wasp Runner",
+  "description": "Configurable command runner using .bluewasp.yml files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:bluewasp-runner.run",
+    "onCommand:bluewasp-runner.runStage",
+    "onCommand:bluewasp-runner.runSequence",
+    "onCommand:bluewasp-runner.runAll",
+    "onCommand:bluewasp-runner.showOutput",
+    "workspaceContains:.bluewasp.yml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bluewasp-runner.run",
+        "title": "Blue Wasp: Run Command"
+      },
+      {
+        "command": "bluewasp-runner.runStage",
+        "title": "Blue Wasp: Run Stage"
+      },
+      {
+        "command": "bluewasp-runner.runSequence",
+        "title": "Blue Wasp: Run Sequence"
+      },
+      {
+        "command": "bluewasp-runner.runAll",
+        "title": "Blue Wasp: Run (All Types)"
+      },
+      {
+        "command": "bluewasp-runner.showOutput",
+        "title": "Blue Wasp: Show Output Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Blue Wasp Runner",
+      "properties": {
+        "bluewasp-runner.configFile": {
+          "type": "string",
+          "default": ".bluewasp.yml",
+          "description": "The configuration file to use for Blue Wasp Runner"
+        },
+        "bluewasp-runner.showOutputOnRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to automatically show the output panel when running commands, stages, or sequences"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "lint": "eslint src --ext ts",
+    "vsce-package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/glob": "^7.1.3",
+    "@types/node": "^16.18.126",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^5.30.0",
+    "@typescript-eslint/parser": "^5.30.0",
+    "eslint": "^8.18.0",
+    "glob": "^8.0.3",
+    "ts-loader": "^9.3.1",
+    "typescript": "^4.7.4",
+    "webpack": "^5.73.0",
+    "webpack-cli": "^4.10.0",
+    "@vscode/vsce": "^2.19.0"
+  },
+  "dependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.0"
+  },
+  "publisher": "bluewasprunner",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/bluewasp-runner.git"
+  }
+}
