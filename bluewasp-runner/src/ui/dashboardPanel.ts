@@ -58,6 +58,9 @@ export class DashboardPanel {
           case 'runContainer':
             this.executeWithTracking('runContainer', 'Starting container...');
             return;
+          case 'runAll':
+            vscode.commands.executeCommand('bluewasp-runner.runAll');
+            return;
           case 'refresh':
             this._update();
             return;
@@ -397,6 +400,26 @@ export class DashboardPanel {
             font-size: 24px;
             margin-right: 10px;
             color: #3794ff;
+            background: linear-gradient(135deg, #3794ff, #45aaf2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+          }
+          
+          .logo-wasp {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .logo-wasp svg {
+            width: 100%;
+            height: 100%;
           }
           
           .title {
@@ -434,169 +457,241 @@ export class DashboardPanel {
             background-color: var(--vscode-list-hoverBackground);
           }
           
-          .card-icon {
-            font-size: 18px;
-            margin-bottom: 10px;
-          }
-          
           .card-title {
             font-weight: bold;
             margin-bottom: 8px;
+            font-size: 16px;
           }
           
           .card-description {
-            font-size: 12px;
-            flex-grow: 1;
             color: var(--vscode-descriptionForeground);
+            font-size: 14px;
+            flex-grow: 1;
           }
           
-          .section-title {
-            font-size: 16px;
-            font-weight: bold;
+          .card-icon {
+            font-size: 24px;
             margin-bottom: 12px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid var(--vscode-panel-border);
+            color: #3794ff;
           }
           
-          .recent-activity {
-            background-color: var(--vscode-editor-inactiveSelectionBackground);
-            border-radius: 6px;
-            padding: 16px;
-            border: 1px solid var(--vscode-panel-border);
-            max-height: 600px;
+          .activity-section {
+            margin-top: 20px;
+          }
+          
+          .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            padding-bottom: 8px;
+          }
+          
+          .activity-title {
+            font-size: 18px;
+            font-weight: bold;
+          }
+          
+          .activity-actions {
+            display: flex;
+            gap: 8px;
+          }
+          
+          .activity-button {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+          }
+          
+          .activity-button:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+          }
+          
+          .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 400px;
             overflow-y: auto;
+            padding-right: 10px;
           }
           
           .activity-item {
-            padding: 8px 0;
-            border-bottom: 1px solid var(--vscode-panel-border);
             display: flex;
             align-items: center;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            border-left: 3px solid transparent;
+          }
+          
+          .activity-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
           }
           
           .activity-icon {
-            margin-right: 8px;
+            margin-right: 10px;
+            font-size: 16px;
+          }
+          
+          .activity-icon.success {
+            color: #4caf50;
+          }
+          
+          .activity-icon.error {
+            color: #f44336;
+          }
+          
+          .activity-icon.running {
+            color: #2196f3;
           }
           
           .activity-text {
             flex-grow: 1;
+            font-size: 14px;
           }
           
           .activity-time {
-            font-size: 12px;
             color: var(--vscode-descriptionForeground);
-          }
-          
-          .success {
-            color: #89d185;
-          }
-          
-          .error {
-            color: #f14c4c;
-          }
-          
-          .running {
-            color: #3794ff;
-          }
-          
-          .action-buttons {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: -30px;
-          }
-          
-          .btn {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
             font-size: 12px;
-            margin-left: 8px;
+            margin-left: 10px;
           }
           
-          .btn:hover {
-            background-color: var(--vscode-button-hoverBackground);
+          .wasp-badge {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3794ff, #45aaf2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: transform 0.2s;
+            z-index: 999;
           }
           
-          .btn-danger {
-            background-color: #f14c4c;
+          .wasp-badge:hover {
+            transform: scale(1.1);
           }
           
-          .btn-danger:hover {
-            background-color: #e13c3c;
+          @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+          }
+          
+          .pulse {
+            animation: pulse 2s infinite;
           }
         </style>
       </head>
       <body>
         <div class="dashboard">
           <div class="header">
-            <div class="logo">🐝</div>
-            <div class="title">Blue Wasp Dashboard</div>
+            <div class="logo-wasp">
+              <svg width="36" height="36" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 2C7.2 2 6.5 2.5 6.5 3C6.5 3.5 7 4 8 4C9 4 9.5 3.5 9.5 3C9.5 2.5 8.8 2 8 2Z" fill="#3794FF"/>
+                <path d="M12 5C11.5 4.8 10.5 5.2 10 6L8 5.5L6 6C5.5 5.2 4.5 4.8 4 5C3.5 5.2 3.2 6 3.5 7C3.8 8 4.2 8.2 5 8.5L6 13H10L11 8.5C11.8 8.2 12.2 8 12.5 7C12.8 6 12.5 5.2 12 5Z" fill="#3794FF"/>
+                <path d="M4 9.5L2 10.5L1 12L2 13L4 12.5" stroke="#3794FF" stroke-width="0.8"/>
+                <path d="M12 9.5L14 10.5L15 12L14 13L12 12.5" stroke="#3794FF" stroke-width="0.8"/>
+              </svg>
+            </div>
+            <div>
+              <div class="title">Blue Wasp Dashboard</div>
+              <div class="subtitle">Run tasks, view activities, and manage Docker containers</div>
+            </div>
           </div>
           
-          <div class="subtitle">Manage your commands, stages, sequences and Docker containers</div>
-          
-          <div class="section-title">Quick Actions</div>
           <div class="card-container">
-            <div class="card" onclick="sendCommand('runCommand')">
-              <div class="card-icon">▶️</div>
+            <div class="card" onclick="runCommand()">
+              <div class="card-icon">⚡</div>
               <div class="card-title">Run Command</div>
-              <div class="card-description">Execute a single command defined in your configuration</div>
+              <div class="card-description">Execute individual commands defined in your configuration</div>
             </div>
             
-            <div class="card" onclick="sendCommand('runStage')">
+            <div class="card" onclick="runStage()">
               <div class="card-icon">🔄</div>
               <div class="card-title">Run Stage</div>
-              <div class="card-description">Run a group of commands organized as a stage</div>
+              <div class="card-description">Execute a group of commands as a stage</div>
             </div>
             
-            <div class="card" onclick="sendCommand('runSequence')">
+            <div class="card" onclick="runSequence()">
               <div class="card-icon">📋</div>
               <div class="card-title">Run Sequence</div>
               <div class="card-description">Execute a sequence of stages in order</div>
             </div>
             
-            <div class="card" onclick="sendCommand('runContainer')">
-              <div class="card-icon">🐳</div>
-              <div class="card-title">Start Container</div>
-              <div class="card-description">Start a Docker container from your configuration</div>
+            <div class="card" onclick="runContainer()">
+              <div class="card-icon">🐋</div>
+              <div class="card-title">Run Container</div>
+              <div class="card-description">Start and manage Docker containers</div>
             </div>
           </div>
           
-          <div class="section-title">
-            Recent Activity
-            <div class="action-buttons">
-              <button class="btn" onclick="sendCommand('refresh')">Refresh</button>
-              <button class="btn btn-danger" onclick="sendCommand('clear')">Clear History</button>
+          <div class="activity-section">
+            <div class="activity-header">
+              <div class="activity-title">Recent Activities</div>
+              <div class="activity-actions">
+                <button class="activity-button" onclick="refresh()">Refresh</button>
+                <button class="activity-button" onclick="clear()">Clear All</button>
+              </div>
             </div>
-          </div>
-          <div class="recent-activity">
-            ${activitiesHtml}
+            
+            <div class="activity-list">
+              ${activitiesHtml}
+            </div>
           </div>
         </div>
         
+        <div class="wasp-badge pulse" title="Quick access to BlueWasp actions">
+          <svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2C7.2 2 6.5 2.5 6.5 3C6.5 3.5 7 4 8 4C9 4 9.5 3.5 9.5 3C9.5 2.5 8.8 2 8 2Z" fill="white"/>
+            <path d="M12 5C11.5 4.8 10.5 5.2 10 6L8 5.5L6 6C5.5 5.2 4.5 4.8 4 5C3.5 5.2 3.2 6 3.5 7C3.8 8 4.2 8.2 5 8.5L6 13H10L11 8.5C11.8 8.2 12.2 8 12.5 7C12.8 6 12.5 5.2 12 5Z" fill="white"/>
+            <path d="M4 9.5L2 10.5L1 12L2 13L4 12.5" stroke="white" stroke-width="0.8"/>
+            <path d="M12 9.5L14 10.5L15 12L14 13L12 12.5" stroke="white" stroke-width="0.8"/>
+          </svg>
+        </div>
+
         <script>
-          // Function to send messages to the extension
-          function sendCommand(command) {
-            const vscode = acquireVsCodeApi();
-            vscode.postMessage({ command: command });
+          const vscode = acquireVsCodeApi();
+          
+          function runCommand() {
+            vscode.postMessage({ command: 'runCommand' });
           }
           
-          // Auto-refresh every 5 seconds
-          const refreshInterval = setInterval(() => {
-            try {
-              sendCommand('refresh');
-            } catch (err) {
-              // If an error occurs (like the webview being disposed), clear the interval
-              clearInterval(refreshInterval);
-            }
-          }, 5000);
+          function runStage() {
+            vscode.postMessage({ command: 'runStage' });
+          }
           
-          // Handle page unload
-          window.addEventListener('unload', () => {
-            clearInterval(refreshInterval);
+          function runSequence() {
+            vscode.postMessage({ command: 'runSequence' });
+          }
+          
+          function runContainer() {
+            vscode.postMessage({ command: 'runContainer' });
+          }
+          
+          function refresh() {
+            vscode.postMessage({ command: 'refresh' });
+          }
+          
+          function clear() {
+            vscode.postMessage({ command: 'clear' });
+          }
+          
+          // Badge popup menu
+          document.querySelector('.wasp-badge').addEventListener('click', function() {
+            // Toggle popup menu
+            vscode.postMessage({ command: 'runAll' });
           });
         </script>
       </body>

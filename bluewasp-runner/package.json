@@ -22,14 +22,110 @@
     "onCommand:bluewasp-runner.viewContainerLogs",
     "onCommand:bluewasp-runner.showDockerOutput",
     "onCommand:bluewasp-runner.addDockerContainer",
-    "workspaceContains:.bluewasp.yml"
+    "onCommand:bluewasp-runner.runSpecificCommand",
+    "onCommand:bluewasp-runner.runSpecificStage",
+    "onCommand:bluewasp-runner.runSpecificSequence",
+    "onCommand:bluewasp-runner.refreshViews",
+    "onCommand:bluewasp-runner.startContainer",
+    "workspaceContains:.bluewasp.yml",
+    "onView:bluewasp-dashboard",
+    "onView:bluewasp-container"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bluewasp-sidebar",
+          "title": "Blue Wasp",
+          "icon": "media/wasp-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bluewasp-sidebar": [
+        {
+          "id": "bluewasp-dashboard",
+          "name": "Dashboard",
+          "icon": "media/wasp-icon.svg",
+          "contextualTitle": "Blue Wasp Dashboard",
+          "when": "workbenchState != empty"
+        },
+        {
+          "id": "bluewasp-container",
+          "name": "Containers",
+          "icon": "media/wasp-icon.svg",
+          "contextualTitle": "Docker Containers",
+          "when": "workbenchState != empty"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "bluewasp-runner.refreshViews",
+          "when": "view == bluewasp-dashboard || view == bluewasp-container",
+          "group": "navigation"
+        },
+        {
+          "command": "bluewasp-runner.showDashboard",
+          "when": "view == bluewasp-dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "bluewasp-runner.addDockerContainer",
+          "when": "view == bluewasp-container",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bluewasp-runner.runSpecificCommand",
+          "when": "view == bluewasp-dashboard && viewItem == bluewasp-command",
+          "group": "inline"
+        },
+        {
+          "command": "bluewasp-runner.runSpecificStage",
+          "when": "view == bluewasp-dashboard && viewItem == bluewasp-stage",
+          "group": "inline"
+        },
+        {
+          "command": "bluewasp-runner.runSpecificSequence",
+          "when": "view == bluewasp-dashboard && viewItem == bluewasp-sequence",
+          "group": "inline"
+        },
+        {
+          "command": "bluewasp-runner.startContainer",
+          "when": "view == bluewasp-container && viewItem == container",
+          "group": "inline"
+        },
+        {
+          "command": "bluewasp-runner.stopContainer",
+          "when": "view == bluewasp-container && viewItem == container",
+          "group": "inline"
+        },
+        {
+          "command": "bluewasp-runner.viewContainerLogs",
+          "when": "view == bluewasp-container && viewItem == container",
+          "group": "1@1"
+        },
+        {
+          "command": "bluewasp-runner.removeContainer",
+          "when": "view == bluewasp-container && viewItem == container",
+          "group": "1@2"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "bluewasp-runner.showDashboard",
-        "title": "Blue Wasp: Show Dashboard"
+        "title": "Blue Wasp: Show Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "bluewasp-runner.refreshViews",
+        "title": "Blue Wasp: Refresh Views",
+        "icon": "$(refresh)"
       },
       {
         "command": "bluewasp-runner.run",
@@ -61,7 +157,8 @@
       },
       {
         "command": "bluewasp-runner.stopContainer",
-        "title": "Blue Wasp: Stop Docker Container"
+        "title": "Blue Wasp: Stop Docker Container",
+        "icon": "$(stop)"
       },
       {
         "command": "bluewasp-runner.removeContainer",
@@ -77,7 +174,46 @@
       },
       {
         "command": "bluewasp-runner.addDockerContainer",
-        "title": "Blue Wasp: Add Docker Container Configuration"
+        "title": "Blue Wasp: Add Docker Container",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bluewasp-runner.runSpecificCommand",
+        "title": "Blue Wasp: Run Command",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bluewasp-runner.runSpecificStage",
+        "title": "Blue Wasp: Run Stage",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bluewasp-runner.runSpecificSequence",
+        "title": "Blue Wasp: Run Sequence",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bluewasp-runner.startContainer",
+        "title": "Blue Wasp: Start Container",
+        "icon": "$(play)"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "bluewasp-icons",
+        "label": "Blue Wasp Icons",
+        "path": "./media/wasp-codicon.json"
+      }
+    ],
+    "iconFonts": [
+      {
+        "id": "bluewasp-font",
+        "src": [
+          {
+            "path": "./media/wasp-icon.svg",
+            "format": "svg"
+          }
+        ]
       }
     ],
     "configuration": {
@@ -115,6 +251,7 @@
     "@typescript-eslint/eslint-plugin": "^5.30.0",
     "@typescript-eslint/parser": "^5.30.0",
     "@vscode/vsce": "^2.19.0",
+    "copy-webpack-plugin": "^13.0.0",
     "eslint": "^8.18.0",
     "glob": "^8.0.3",
     "ts-loader": "^9.3.1",

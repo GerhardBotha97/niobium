@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyPlugin = require('copy-webpack-plugin');
 
 /**
  * @type {import('webpack').Configuration}
@@ -37,6 +38,13 @@ module.exports = {
       }
     ]
   },
+  plugins: [
+    new CopyPlugin({
+      patterns: [
+        { from: 'media', to: 'media' }
+      ]
+    })
+  ],
   // Ignore warnings about these modules
   ignoreWarnings: [
     {
