@@ -642,7 +642,7 @@ export class DashboardPanel {
               <div class="activity-title">Recent Activities</div>
               <div class="activity-actions">
                 <button class="activity-button" onclick="refresh()">Refresh</button>
-                <button class="activity-button" onclick="clear()">Clear All</button>
+                <button class="activity-button" onclick="clearActivities()">Clear All</button>
               </div>
             </div>
             
@@ -684,7 +684,7 @@ export class DashboardPanel {
             vscode.postMessage({ command: 'refresh' });
           }
           
-          function clear() {
+          function clearActivities() {
             vscode.postMessage({ command: 'clear' });
           }
           
