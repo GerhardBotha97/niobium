@@ -94,6 +94,9 @@ export class CommandRunner {
       let shellExecutable = '/bin/bash';
       if (process.platform === 'win32') {
         shellExecutable = 'cmd.exe';
+      } else if (process.platform === 'darwin') {
+        // On macOS Catalina and later, zsh is the default shell
+        shellExecutable = '/bin/zsh';
       }
       
       // Set shell based on command.shell if provided
