@@ -62,6 +62,10 @@ export class BlueWaspPanel {
             // Handle kill job request
             this._onKillJob(message.jobId);
             break;
+          case 'clearJobs':
+            // Handle clear jobs request
+            this.clearJobs();
+            break;
         }
       },
       null,
@@ -512,15 +516,57 @@ export class BlueWaspPanel {
             background-color: rgba(120, 170, 255, 0.1);
           }
         </style>
+        <style>
+          .container {
+            padding: 10px;
+          }
+          
+          .actions-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+          }
+          
+          .action-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.9em;
+          }
+          
+          .action-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+          }
+          
+          .no-jobs {
+            padding: 20px;
+            text-align: center;
+            color: var(--vscode-descriptionForeground);
+          }
+        </style>
       </head>
       <body>
         <div class="container">
+          <div class="actions-toolbar">
+            <button class="action-button" onclick="clearJobs()">Clear Jobs</button>
+          </div>
           <div class="jobs-container">
             ${jobsHtml.length > 0 ? jobsHtml : '<div class="no-jobs">No jobs to display</div>'}
           </div>
         </div>
         
         <script>
+          const vscode = acquireVsCodeApi();
+          
+          function clearJobs() {
+            vscode.postMessage({
+              command: 'clearJobs'
+            });
+          }
+          
           function toggleJob(id) {
             const details = document.getElementById('details-' + id);
             const header = details.previousElementSibling;
@@ -569,9 +615,6 @@ export class BlueWaspPanel {
               collapseIcon.textContent = '▶';
             }
           }
-          
-          // Initialize vscode api
-          const vscode = acquireVsCodeApi();
           
           // Initialize all job details as expanded
           document.addEventListener('DOMContentLoaded', function() {

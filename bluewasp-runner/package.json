@@ -16,6 +16,7 @@
     "onCommand:bluewasp-runner.runAll",
     "onCommand:bluewasp-runner.showOutput",
     "onCommand:bluewasp-runner.showJobVisualizer",
+    "onCommand:bluewasp-runner.showRunner",
     "onCommand:bluewasp-runner.runContainer",
     "onCommand:bluewasp-runner.stopContainer",
     "onCommand:bluewasp-runner.removeContainer",
@@ -73,6 +74,11 @@
           "group": "navigation"
         },
         {
+          "command": "bluewasp-runner.showRunner",
+          "when": "view == bluewasp-dashboard",
+          "group": "navigation"
+        },
+        {
           "command": "bluewasp-runner.addDockerContainer",
           "when": "view == bluewasp-container",
           "group": "navigation"
@@ -121,6 +127,11 @@
         "command": "bluewasp-runner.showDashboard",
         "title": "Blue Wasp: Show Dashboard",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "bluewasp-runner.showRunner",
+        "title": "Blue Wasp: Show Runner",
+        "icon": "$(play-circle)"
       },
       {
         "command": "bluewasp-runner.refreshViews",

@@ -255,6 +255,7 @@ export class JobOutputService {
   public clearJobs(): void {
     this.activeJobs.clear();
     this.jobHierarchy.clear();
+    this.jobKillHandlers.clear();
     
     if (this.panel) {
       try {

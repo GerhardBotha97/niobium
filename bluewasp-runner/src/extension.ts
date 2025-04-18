@@ -7,6 +7,7 @@ import { DashboardPanel } from './ui/dashboardPanel';
 import { DashboardViewProvider } from './views/dashboardView';
 import { ContainerViewProvider } from './views/containerView';
 import { IgnoreProvider } from './utils/ignoreUtils';
+import { JobOutputService } from './ui/jobOutputService';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Blue Wasp Runner is now active!');
@@ -448,6 +449,13 @@ export function activate(context: vscode.ExtensionContext) {
     commandRunner.showOutput();
   });
 
+  // Register command to show the Runner view
+  const showRunner = vscode.commands.registerCommand('bluewasp-runner.showRunner', () => {
+    // Get the JobOutputService instance and show the panel
+    const jobOutputService = JobOutputService.getInstance(context);
+    jobOutputService.showPanel();
+  });
+
   // Register command to run Docker containers
   const runContainer = vscode.commands.registerCommand('bluewasp-runner.runContainer', async () => {
     try {
@@ -730,13 +738,27 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
+  // Register all commands
   context.subscriptions.push(
     statusBarItem,
     showDashboard,
+    clearActivities,
     runSpecificCommand,
     runSpecificStage,
     runSpecificSequence,
-    clearActivities
+    runCommand,
+    runStage,
+    runSequence,
+    runAll,
+    showOutput,
+    showJobVisualizer,
+    showRunner,
+    runContainer,
+    stopContainer,
+    viewContainerLogs,
+    removeContainer,
+    showDockerOutput,
+    addDockerContainer
   );
 }
 
