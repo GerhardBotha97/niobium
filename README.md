@@ -77,7 +77,36 @@ containers:
       - source: ./data/postgres
         target: /var/lib/postgresql/data
     restart_policy: unless-stopped
+
+## Ignoring Files and Directories
+
+You can create a `.bluewaspignore` file in your project root to specify files and directories that should be ignored by Blue Wasp Runner. This is useful for excluding unnecessary files from Docker volumes or skipping commands in specific directories.
+
+The `.bluewaspignore` file uses the same syntax as `.gitignore`:
+
 ```
+# Ignore node_modules directory
+node_modules/
+
+# Ignore build outputs
+/dist/
+/build/
+
+# Ignore specific file types
+**/*.log
+**/*.tmp
+
+# Include a specific file that would otherwise be ignored
+!/dist/important-file.txt
+```
+
+When Blue Wasp Runner encounters an ignored path:
+
+- Commands with a working directory in an ignored path will not run
+- Docker volumes with sources in ignored paths will be skipped with a warning
+- Files in ignored paths will not be included in Docker container operations
+
+A sample `.bluewaspignore` file is available in the examples directory.
 
 ## Command Properties
 

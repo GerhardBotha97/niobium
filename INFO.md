@@ -4,6 +4,47 @@
 
 Blue Wasp Runner uses `.bluewasp.yml` files to configure commands, stages, and sequences that can be executed from VS Code. The configuration file should be placed in your project root.
 
+## Ignoring Files and Directories
+
+Blue Wasp Runner supports a `.bluewaspignore` file that allows you to specify files and directories that should be excluded from command execution and Docker volume operations. The ignore file uses the same syntax as `.gitignore`.
+
+### Ignore File Format
+
+Create a `.bluewaspignore` file in your project root with patterns like:
+
+```
+# Ignore node_modules directory
+node_modules/
+
+# Ignore build outputs
+/dist/
+/build/
+/out/
+
+# Ignore temporary files
+*.tmp
+*.log
+
+# Include a specific file that would otherwise be ignored
+!/dist/important-file.txt
+
+# Ignore specific file types in all directories
+**/*.zip
+**/*.tar.gz
+```
+
+### Ignore Behavior
+
+When Blue Wasp Runner encounters paths that match patterns in the `.bluewaspignore` file:
+
+- Commands with a working directory in an ignored path will not run (with a warning)
+- Docker volumes with sources in ignored paths will be skipped (with a warning)
+- Files in ignored paths will not be included in Docker container operations
+
+This is useful for excluding large dependency directories, temporary build artifacts, and sensitive files from your command execution environment.
+
+A sample `.bluewaspignore` file is available in the `examples/sample.bluewaspignore` file for reference.
+
 ## Basic Structure
 
 ```yaml

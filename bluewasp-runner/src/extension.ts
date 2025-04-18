@@ -6,6 +6,7 @@ import { DockerRunner } from './dockerRunner';
 import { DashboardPanel } from './ui/dashboardPanel';
 import { DashboardViewProvider } from './views/dashboardView';
 import { ContainerViewProvider } from './views/containerView';
+import { IgnoreProvider } from './utils/ignoreUtils';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Blue Wasp Runner is now active!');
@@ -13,6 +14,10 @@ export function activate(context: vscode.ExtensionContext) {
   const configProvider = new ConfigProvider();
   const commandRunner = new CommandRunner(context);
   const dockerRunner = new DockerRunner(context);
+  
+  // Initialize the ignore provider
+  const ignoreProvider = IgnoreProvider.getInstance();
+  ignoreProvider.initialize(context);
 
   // Initialize the dashboard panel
   DashboardPanel.initialize(context);

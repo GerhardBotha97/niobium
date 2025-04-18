@@ -5,6 +5,8 @@ import { CommandConfig, StageConfig, ConfigProvider, BlueWaspConfig, DockerConta
 import { promisify } from 'util';
 import { JobOutputService } from './ui/jobOutputService';
 import { DockerRunner } from './dockerRunner';
+import { IgnoreProvider } from './utils/ignoreUtils';
+import { sanitizeContainerName } from './utils/dockerUtils';
 
 const execAsync = promisify(cp.exec);
 
@@ -22,12 +24,33 @@ export class CommandRunner {
   private outputChannel: vscode.OutputChannel;
   private jobOutputService: JobOutputService;
   private dockerRunner: DockerRunner;
+  private ignoreProvider: IgnoreProvider;
 
   constructor(context?: vscode.ExtensionContext) {
     this.configProvider = new ConfigProvider();
     this.outputChannel = vscode.window.createOutputChannel('Blue Wasp Runner');
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
     this.dockerRunner = new DockerRunner(context);
+    this.ignoreProvider = IgnoreProvider.getInstance();
+  }
+
+  /**
+   * Check if a path should be ignored based on .bluewaspignore patterns
+   * @param filePath Path to check (relative to workspace root)
+   * @param workspaceRoot Workspace root path
+   * @returns True if the path should be ignored
+   */
+  private shouldIgnorePath(filePath: string, workspaceRoot: string): boolean {
+    // Get path relative to workspace root
+    let relativePath = filePath;
+    if (filePath.startsWith(workspaceRoot)) {
+      relativePath = path.relative(workspaceRoot, filePath);
+    }
+    
+    // Normalize path separators
+    relativePath = relativePath.replace(/\\/g, '/');
+    
+    return this.ignoreProvider.isIgnored(relativePath);
   }
 
   async runCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
@@ -77,6 +100,22 @@ export class CommandRunner {
       const cwd = command.cwd
         ? path.resolve(workspaceRoot, command.cwd)
         : workspaceRoot;
+      
+      // Check if the working directory is in an ignored path
+      if (this.shouldIgnorePath(cwd, workspaceRoot)) {
+        const errorMsg = `Working directory "${command.cwd}" is in an ignored path according to .bluewaspignore`;
+        this.outputChannel.appendLine(`\n[ERROR] ${errorMsg}`);
+        if (jobId) {
+          this.jobOutputService.appendError(jobId, errorMsg);
+          this.jobOutputService.completeJobFailure(jobId, 1);
+        }
+        return {
+          success: false,
+          output: '',
+          error: errorMsg,
+          exitCode: 1
+        };
+      }
       
       // Set environment variables
       const env = { ...process.env };
@@ -482,7 +521,7 @@ export class CommandRunner {
     
     // Create a Docker container config from the command
     const containerConfig: DockerContainerConfig = {
-      name: command.container_name || `bluewasp-${command.name}-${Date.now()}`,
+      name: command.container_name || `bluewasp-${sanitizeContainerName(command.name)}-${Date.now()}`,
       description: command.description,
       image: command.image!, // Using non-null assertion as we've validated this exists
       tag: command.image_tag,

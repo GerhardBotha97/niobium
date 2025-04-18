@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as Dockerode from 'dockerode';
 import { DockerContainerConfig } from './configProvider';
 import { JobOutputService } from './ui/jobOutputService';
+import { IgnoreProvider } from './utils/ignoreUtils';
+import * as path from 'path';
+import { sanitizeContainerName } from './utils/dockerUtils';
 
 // Interface to track Docker execution results
 export interface DockerExecutionResult {
@@ -17,11 +20,32 @@ export class DockerRunner {
   private outputChannel: vscode.OutputChannel;
   private jobOutputService: JobOutputService;
   private runningContainers: Map<string, Dockerode.Container> = new Map();
+  private ignoreProvider: IgnoreProvider;
 
   constructor(context?: vscode.ExtensionContext) {
     this.docker = new Dockerode();
     this.outputChannel = vscode.window.createOutputChannel('Blue Wasp Docker');
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
+    this.ignoreProvider = IgnoreProvider.getInstance();
+  }
+
+  /**
+   * Check if a path should be ignored based on .bluewaspignore patterns
+   * @param filePath Path to check (relative to workspace root)
+   * @param workspaceRoot Workspace root path
+   * @returns True if the path should be ignored
+   */
+  private shouldIgnorePath(filePath: string, workspaceRoot: string): boolean {
+    // Get path relative to workspace root
+    let relativePath = filePath;
+    if (filePath.startsWith(workspaceRoot)) {
+      relativePath = path.relative(workspaceRoot, filePath);
+    }
+    
+    // Normalize path separators
+    relativePath = relativePath.replace(/\\/g, '/');
+    
+    return this.ignoreProvider.isIgnored(relativePath);
   }
 
   /**
@@ -37,6 +61,13 @@ export class DockerRunner {
     this.outputChannel.appendLine(`Image: ${container.image}${container.tag ? `:${container.tag}` : ''}`);
     if (container.command) {
       this.outputChannel.appendLine(`Command: ${container.command}`);
+    }
+    
+    // Ensure container name is valid for Docker
+    const sanitizedContainerName = sanitizeContainerName(container.name);
+    if (sanitizedContainerName !== container.name) {
+      this.outputChannel.appendLine(`Sanitized container name to: ${sanitizedContainerName}`);
+      container = { ...container, name: sanitizedContainerName };
     }
     
     // Record start time
@@ -115,6 +146,16 @@ export class DockerRunner {
       if (container.volumes) {
         for (const vol of container.volumes) {
           const source = vol.source.startsWith('/') ? vol.source : `${workspaceRoot}/${vol.source}`;
+          
+          // Skip volumes that match ignore patterns
+          if (this.shouldIgnorePath(source, workspaceRoot)) {
+            this.outputChannel.appendLine(`[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern in .bluewaspignore`);
+            if (jobId) {
+              this.jobOutputService.appendOutput(jobId, `[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern\n`);
+            }
+            continue;
+          }
+          
           const mode = vol.readonly ? 'ro' : 'rw';
           binds.push(`${source}:${vol.target}:${mode}`);
           volumes[vol.target] = {};
@@ -678,9 +719,16 @@ export class DockerRunner {
    * Helper method to find a container by name
    */
   private async findContainer(name: string): Promise<Dockerode.Container | undefined> {
+    // Sanitize the name for consistency with how containers are created
+    const sanitizedName = sanitizeContainerName(name);
+    
     // First check our cache of running containers
     if (this.runningContainers.has(name)) {
       return this.runningContainers.get(name);
+    }
+    
+    if (sanitizedName !== name && this.runningContainers.has(sanitizedName)) {
+      return this.runningContainers.get(sanitizedName);
     }
     
     // Otherwise, search Docker for the container
@@ -690,7 +738,10 @@ export class DockerRunner {
       // Check if this container has the name we're looking for
       const containerNames = containerInfo.Names || [];
       const hasMatchingName = containerNames.some(containerName => 
-        containerName === `/${name}` || containerName === name
+        containerName === `/${name}` || 
+        containerName === name || 
+        containerName === `/${sanitizedName}` || 
+        containerName === sanitizedName
       );
       
       if (hasMatchingName) {
