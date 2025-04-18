@@ -284,59 +284,27 @@ export class DockerRunner {
       // For one-off commands that exit quickly, wait for the container to complete
       // and capture the output
       if (container.command) {
-        // Wait for the container to complete with a timeout
-        try {
-          // Output a message that we're running the command
-          this.outputChannel.appendLine(`\n[COMMAND] ${container.command}`);
-          
-          // Wait for the container to exit (with 30 second timeout)
-          const waitPromise = containerInstance.wait();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Container wait timeout after 30 seconds')), 30000)
-          );
-          
-          await Promise.race([waitPromise, timeoutPromise]);
-          
-          // Get the logs immediately after the container has exited
-          const logStream = await containerInstance.logs({
-            follow: false,
-            stdout: true,
-            stderr: true,
-            tail: -1  // Use -1 to get all logs
-          });
-          
-          const logs = logStream.toString();
-          this.outputChannel.appendLine(`\n[OUTPUT]`);
-          this.outputChannel.appendLine(logs);
-          
-          if (jobId) {
-            this.jobOutputService.appendOutput(jobId, logs);
-          }
-        } catch (waitError) {
-          // If waiting for the container timed out, just show what we can
-          this.outputChannel.appendLine(`\n[WARNING] Container command is still running: ${container.command}`);
-          
-          // Try to get logs anyway
-          try {
-            const logStream = await containerInstance.logs({
-              follow: false,
-              stdout: true,
-              stderr: true,
-              tail: 100
-            });
-            
-            const partialLogs = logStream.toString();
-            if (partialLogs) {
-              this.outputChannel.appendLine(`\n[PARTIAL OUTPUT]`);
-              this.outputChannel.appendLine(partialLogs);
-              
-              if (jobId) {
-                this.jobOutputService.appendOutput(jobId, partialLogs);
-              }
-            }
-          } catch (logError) {
-            this.outputChannel.appendLine(`\n[ERROR] Failed to get container logs: ${logError instanceof Error ? logError.message : String(logError)}`);
-          }
+        // Output a message that we're running the command
+        this.outputChannel.appendLine(`\n[COMMAND] ${container.command}`);
+        
+        // Wait for the container to exit without a timeout
+        // We're removing the 30-second timeout to allow containers to run as long as needed
+        const containerExitData = await containerInstance.wait();
+        
+        // Get the logs immediately after the container has exited
+        const logStream = await containerInstance.logs({
+          follow: false,
+          stdout: true,
+          stderr: true,
+          tail: -1  // Use -1 to get all logs
+        });
+        
+        const logs = logStream.toString();
+        this.outputChannel.appendLine(`\n[OUTPUT]`);
+        this.outputChannel.appendLine(logs);
+        
+        if (jobId) {
+          this.jobOutputService.appendOutput(jobId, logs);
         }
       }
       
