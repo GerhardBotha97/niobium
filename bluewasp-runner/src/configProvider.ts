@@ -21,6 +21,9 @@ export interface CommandConfig {
   network?: string;
   entrypoint?: string;
   remove_after_run?: boolean;
+  // New fields for variable passing
+  outputs?: Record<string, string>;
+  depends_on?: string | string[];
 }
 
 export interface StageConfig {
@@ -75,6 +78,43 @@ export interface BlueWaspConfig {
   stages?: StageConfig[];
   sequences?: SequenceConfig[];
   containers?: DockerContainerConfig[];
+  // New field for global variables
+  variables?: Record<string, string>;
+}
+
+// Storage for output variables to enable passing between commands
+export class VariableManager {
+  private static instance: VariableManager;
+  private outputVariables: Record<string, string> = {};
+
+  private constructor() { }
+
+  public static getInstance(): VariableManager {
+    if (!VariableManager.instance) {
+      VariableManager.instance = new VariableManager();
+    }
+    return VariableManager.instance;
+  }
+
+  // Set a variable value
+  setVariable(name: string, value: string): void {
+    this.outputVariables[name] = value;
+  }
+
+  // Get a variable value
+  getVariable(name: string): string | undefined {
+    return this.outputVariables[name];
+  }
+
+  // Get all variables as a map
+  getAllVariables(): Record<string, string> {
+    return { ...this.outputVariables };
+  }
+
+  // Clear all variables
+  clearVariables(): void {
+    this.outputVariables = {};
+  }
 }
 
 export class ConfigProvider {
@@ -94,6 +134,14 @@ export class ConfigProvider {
       if (!config || !Array.isArray(config.commands)) {
         vscode.window.showErrorMessage('Invalid configuration file format. Expected "commands" array.');
         return null;
+      }
+      
+      // Load global variables into VariableManager if defined
+      if (config.variables) {
+        const variableManager = VariableManager.getInstance();
+        for (const [key, value] of Object.entries(config.variables)) {
+          variableManager.setVariable(key, String(value));
+        }
       }
       
       return this.validateConfig(config);
@@ -165,11 +213,34 @@ export class ConfigProvider {
       return true;
     });
     
+    // Add validation for command dependencies and outputs
+    config.commands.forEach(cmd => {
+      if (cmd.depends_on) {
+        const dependencies = Array.isArray(cmd.depends_on) ? cmd.depends_on : [cmd.depends_on];
+        
+        for (const dependency of dependencies) {
+          if (!config.commands.some(c => c.name === dependency)) {
+            vscode.window.showWarningMessage(`Command "${cmd.name}" depends on non-existent command "${dependency}"`);
+          }
+        }
+      }
+      
+      if (cmd.outputs && Object.keys(cmd.outputs).length > 0) {
+        // Ensure output variable names are valid
+        for (const outputName of Object.keys(cmd.outputs)) {
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(outputName)) {
+            vscode.window.showWarningMessage(`Invalid output variable name "${outputName}" in command "${cmd.name}"`);
+          }
+        }
+      }
+    });
+    
     return {
       commands: validCommands,
       stages: validStages,
       sequences: validSequences,
-      containers: validContainers
+      containers: validContainers,
+      variables: config.variables
     };
   }
 

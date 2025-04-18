@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
-import { CommandConfig, StageConfig, ConfigProvider, BlueWaspConfig, DockerContainerConfig } from './configProvider';
+import { CommandConfig, StageConfig, ConfigProvider, BlueWaspConfig, DockerContainerConfig, VariableManager } from './configProvider';
 import { promisify } from 'util';
 import { JobOutputService } from './ui/jobOutputService';
 import { DockerRunner } from './dockerRunner';
@@ -27,6 +27,7 @@ export class CommandRunner {
   private jobOutputService: JobOutputService;
   private dockerRunner: DockerRunner;
   private ignoreProvider: IgnoreProvider;
+  private variableManager: VariableManager;
 
   constructor(context?: vscode.ExtensionContext) {
     this.configProvider = new ConfigProvider();
@@ -34,6 +35,7 @@ export class CommandRunner {
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
     this.dockerRunner = new DockerRunner(context);
     this.ignoreProvider = IgnoreProvider.getInstance();
+    this.variableManager = VariableManager.getInstance();
   }
 
   /**
@@ -55,6 +57,86 @@ export class CommandRunner {
     return this.ignoreProvider.isIgnored(relativePath);
   }
 
+  /**
+   * Process a command string by replacing variables with their values
+   * @param commandStr The command string with variables to replace
+   * @returns The command string with variables replaced
+   */
+  private processVariables(commandStr: string): string {
+    // Get all variables
+    const variables = this.variableManager.getAllVariables();
+    
+    // Replace all ${VAR_NAME} and $VAR_NAME patterns
+    let processedCommand = commandStr;
+    
+    // First, replace ${VAR_NAME} pattern (safer as it has boundaries)
+    for (const [key, value] of Object.entries(variables)) {
+      const pattern = new RegExp(`\\$\\{${key}\\}`, 'g');
+      processedCommand = processedCommand.replace(pattern, value);
+    }
+    
+    // Then replace $VAR_NAME pattern (more prone to false positives)
+    for (const [key, value] of Object.entries(variables)) {
+      const pattern = new RegExp(`\\$${key}\\b`, 'g');
+      processedCommand = processedCommand.replace(pattern, value);
+    }
+    
+    return processedCommand;
+  }
+
+  /**
+   * Extract output variables from command output using the outputs configuration
+   * @param command The command configuration with outputs defined
+   * @param stdout The stdout from the command execution
+   */
+  private extractOutputVariables(command: CommandConfig, stdout: string): void {
+    if (!command.outputs) {
+      return;
+    }
+    
+    this.outputChannel.appendLine(`\n[Variables] Extracting output variables for command: ${command.name}`);
+    
+    for (const [outputName, _] of Object.entries(command.outputs)) {
+      // Look for ::set-output name=OUTPUT_NAME::VALUE pattern
+      const setOutputRegex = new RegExp(`::set-output name=${outputName}::(.*)`, 'i');
+      const match = stdout.match(setOutputRegex);
+      
+      if (match && match[1]) {
+        const value = match[1].trim();
+        this.variableManager.setVariable(outputName, value);
+        this.outputChannel.appendLine(`[Variables] Extracted ${outputName}=${value}`);
+        
+        // Also log to job output if available
+        if (this.jobOutputService) {
+          this.jobOutputService.appendOutput(command.name, `\n[Variables] Set ${outputName}=${value}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if a command has dependencies and if they have been run
+   * @param command The command to check dependencies for
+   * @param executedCommands List of already executed command names
+   * @returns True if dependencies are satisfied, false otherwise
+   */
+  private areDependenciesSatisfied(command: CommandConfig, executedCommands: string[]): boolean {
+    if (!command.depends_on) {
+      return true;
+    }
+    
+    const dependencies = Array.isArray(command.depends_on) ? command.depends_on : [command.depends_on];
+    
+    for (const dependency of dependencies) {
+      if (!executedCommands.includes(dependency)) {
+        this.outputChannel.appendLine(`\n[ERROR] Dependency "${dependency}" for command "${command.name}" has not been executed`);
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
   async runCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
     // If the command has an image property, run it as a Docker container
     if (command.image) {
@@ -68,7 +150,10 @@ export class CommandRunner {
     if (command.description) {
       this.outputChannel.appendLine(`Description: ${command.description}`);
     }
-    this.outputChannel.appendLine(`Command: ${command.command}`);
+    
+    // Process variables in the command string
+    const processedCommand = this.processVariables(command.command);
+    this.outputChannel.appendLine(`Command: ${processedCommand}`);
     
     if (command.cwd) {
       this.outputChannel.appendLine(`Working directory: ${command.cwd}`);
@@ -77,7 +162,10 @@ export class CommandRunner {
     if (command.env && Object.keys(command.env).length > 0) {
       this.outputChannel.appendLine('Environment variables:');
       for (const [key, value] of Object.entries(command.env)) {
-        this.outputChannel.appendLine(`  ${key}=${value}`);
+        const processedValue = this.processVariables(value);
+        this.outputChannel.appendLine(`  ${key}=${processedValue}`);
+        // Update the env object with processed values for actual execution
+        command.env[key] = processedValue;
       }
     }
 
@@ -162,7 +250,7 @@ export class CommandRunner {
       let childPids: number[] = [];
       
       // Try to detect which ports this command will use
-      const detectedServerPorts = this.detectPossiblePorts(command.command);
+      const detectedServerPorts = this.detectPossiblePorts(processedCommand);
       if (detectedServerPorts.length > 0) {
         this.outputChannel.appendLine(`\n[INFO] Detected possible ports: ${detectedServerPorts.join(', ')}`);
       }
@@ -196,7 +284,7 @@ export class CommandRunner {
           ? { ...execOptions, windowsHide: true } 
           : execOptions;
         
-        childProcess = cp.exec(command.command, execOptionsWithDetached);
+        childProcess = cp.exec(processedCommand, execOptionsWithDetached);
         
         // Update the job with PID information
         if (childProcess && childProcess.pid && jobId) {
@@ -325,6 +413,9 @@ export class CommandRunner {
           reject(error);
         });
       });
+      
+      // Extract output variables if specified in the command
+      this.extractOutputVariables(command, execResult.stdout);
       
       // Write output to the output channel
       // No need to append stdout/stderr again as we've already done it in real-time
@@ -465,14 +556,34 @@ export class CommandRunner {
     let commandIndex = 0;
     let stageSuccess = true;
     let combinedOutput = '';
+    let executedCommands: string[] = [];
     
     for (const command of commands) {
       commandIndex++;
       this.outputChannel.appendLine(`\n[${commandIndex}/${commands.length}] Executing command: ${command.name}`);
       
-      // Run command and link to parent stage in WebView
+      // Check if command dependencies are satisfied
+      if (!this.areDependenciesSatisfied(command, executedCommands)) {
+        const error = `Cannot run command "${command.name}" because its dependencies have not been executed`;
+        this.outputChannel.appendLine(`\n[ERROR] ${error}`);
+        
+        if (!command.allow_failure) {
+          return { 
+            success: false, 
+            output: combinedOutput, 
+            error: error, 
+            exitCode: 1
+          };
+        }
+        
+        continue;
+      }
+      
       const result = await this.runCommand(command, workspaceRoot);
       combinedOutput += result.output + '\n';
+      
+      // Track executed commands for dependency checking
+      executedCommands.push(command.name);
       
       // If this command had a WebView job, add it as child of the stage
       if (stageJobId && this.jobOutputService) {

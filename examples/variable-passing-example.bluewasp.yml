@@ -1,0 +1,98 @@
+# Example .bluewasp.yml configuration file demonstrating variable passing between jobs
+
+# Global variables - accessible in all commands
+variables:
+  PROJECT_NAME: bluewasp
+  VERSION: 1.0.0
+  BUILD_DIR: ./dist
+  ARTIFACT_PREFIX: release
+
+# Individual commands
+commands:
+  # Command that uses global variables
+  - name: echo-global-vars
+    description: Display the global variables
+    command: echo "Building $PROJECT_NAME version ${VERSION} to directory $BUILD_DIR"
+  
+  # Command that sets an output variable
+  - name: generate-build-id
+    description: Generate a unique build ID
+    command: echo "::set-output name=BUILD_ID::$(date +%Y%m%d%H%M%S)"
+    outputs:
+      BUILD_ID:
+  
+  # Command that depends on the previous command and uses its output
+  - name: echo-build-id
+    description: Echo the build ID from the previous command
+    command: echo "Build ID is ${BUILD_ID}"
+    depends_on: generate-build-id
+  
+  # Command that generates multiple outputs
+  - name: generate-artifact-info
+    description: Generate artifact name and timestamp
+    command: |
+      echo "::set-output name=TIMESTAMP::$(date)"
+      echo "::set-output name=ARTIFACT_NAME::${ARTIFACT_PREFIX}-${PROJECT_NAME}-${VERSION}.zip"
+    outputs:
+      TIMESTAMP:
+      ARTIFACT_NAME:
+  
+  # Command that depends on multiple outputs from the previous command
+  - name: display-artifact-info
+    description: Display the artifact information
+    command: echo "Artifact ${ARTIFACT_NAME} created at ${TIMESTAMP}"
+    depends_on: generate-artifact-info
+  
+  # Command with environment variables that use global variables
+  - name: env-var-example
+    description: Example using environment variables with variable substitution
+    command: env | grep MY_
+    env:
+      MY_PROJECT: ${PROJECT_NAME}
+      MY_VERSION: ${VERSION}
+      MY_BUILD_PATH: ${BUILD_DIR}
+  
+  # Command with conditional execution based on a variable
+  - name: conditional-command
+    description: Run a command only if a specific condition is met
+    command: |
+      if [ "${PROJECT_NAME}" = "bluewasp" ]; then
+        echo "This is the Blue Wasp project"
+      else
+        echo "This is not the Blue Wasp project"
+      fi
+
+# Stages with variable-dependent commands
+stages:
+  - name: info-stage
+    description: Display project information
+    commands:
+      - echo-global-vars
+      - generate-build-id
+      - echo-build-id
+  
+  - name: artifact-stage
+    description: Generate artifact information
+    commands:
+      - generate-artifact-info
+      - display-artifact-info
+  
+  # Stage that depends on outputs from previous stages
+  - name: deployment-stage
+    description: Mock deployment using variables from previous stages
+    commands:
+      - name: deploy-artifact
+        description: Deploy the artifact (mock)
+        command: echo "Deploying ${ARTIFACT_NAME} with build ID ${BUILD_ID}"
+        depends_on:
+          - generate-build-id
+          - generate-artifact-info
+
+# Sequence that chains all stages together
+sequences:
+  - name: build-and-deploy
+    description: Complete build and deploy workflow with variable passing
+    stages:
+      - info-stage
+      - artifact-stage
+      - deployment-stage 
