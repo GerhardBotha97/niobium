@@ -19,10 +19,16 @@ export class JobOutputService {
   }
 
   public showPanel(): void {
-    if (!this.panel) {
-      this.panel = BlueWaspPanel.createOrShow(this.context.extensionUri);
-    } else {
-      this.panel.reveal();
+    try {
+      if (!this.panel) {
+        this.panel = BlueWaspPanel.createOrShow(this.context.extensionUri);
+      } else {
+        this.panel.reveal();
+      }
+    } catch (error) {
+      console.error('Error showing panel:', error);
+      // Reset panel reference if we get an error revealing it
+      this.panel = undefined;
     }
   }
 
@@ -44,7 +50,12 @@ export class JobOutputService {
     this.activeJobs.set(id, jobOutput);
     
     if (this.panel) {
-      this.panel.addJob(jobOutput);
+      try {
+        this.panel.addJob(jobOutput);
+      } catch (error) {
+        console.error('Error adding command job to panel:', error);
+        this.panel = undefined;
+      }
     }
     
     return id;
@@ -69,7 +80,12 @@ export class JobOutputService {
     this.jobHierarchy.set(id, []);
     
     if (this.panel) {
-      this.panel.addJob(jobOutput);
+      try {
+        this.panel.addJob(jobOutput);
+      } catch (error) {
+        console.error('Error adding stage job to panel:', error);
+        this.panel = undefined;
+      }
     }
     
     return id;
@@ -93,7 +109,12 @@ export class JobOutputService {
     this.jobHierarchy.set(id, []);
     
     if (this.panel) {
-      this.panel.addJob(jobOutput);
+      try {
+        this.panel.addJob(jobOutput);
+      } catch (error) {
+        console.error('Error adding sequence job to panel:', error);
+        this.panel = undefined;
+      }
     }
     
     return id;
@@ -118,7 +139,12 @@ export class JobOutputService {
       parentJob.children.push(childJob);
       
       if (this.panel) {
-        this.panel.updateJob(parentId, { children: parentJob.children });
+        try {
+          this.panel.updateJob(parentId, { children: parentJob.children });
+        } catch (error) {
+          console.error('Error updating parent job with child in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -130,7 +156,12 @@ export class JobOutputService {
       job.output += output;
       
       if (this.panel) {
-        this.panel.updateJob(jobId, { output: job.output });
+        try {
+          this.panel.updateJob(jobId, { output: job.output });
+        } catch (error) {
+          console.error('Error appending output to job in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -142,7 +173,12 @@ export class JobOutputService {
       job.error = (job.error || '') + error;
       
       if (this.panel) {
-        this.panel.updateJob(jobId, { error: job.error });
+        try {
+          this.panel.updateJob(jobId, { error: job.error });
+        } catch (error) {
+          console.error('Error appending error to job in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -155,10 +191,15 @@ export class JobOutputService {
       job.endTime = new Date();
       
       if (this.panel) {
-        this.panel.updateJob(jobId, { 
-          status: 'success',
-          endTime: job.endTime
-        });
+        try {
+          this.panel.updateJob(jobId, { 
+            status: 'success',
+            endTime: job.endTime
+          });
+        } catch (error) {
+          console.error('Error completing job with success in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -172,11 +213,16 @@ export class JobOutputService {
       job.exitCode = exitCode;
       
       if (this.panel) {
-        this.panel.updateJob(jobId, { 
-          status: 'failed',
-          endTime: job.endTime,
-          exitCode
-        });
+        try {
+          this.panel.updateJob(jobId, { 
+            status: 'failed',
+            endTime: job.endTime,
+            exitCode
+          });
+        } catch (error) {
+          console.error('Error completing job with failure in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -189,10 +235,15 @@ export class JobOutputService {
       job.endTime = new Date();
       
       if (this.panel) {
-        this.panel.updateJob(jobId, { 
-          status: 'skipped',
-          endTime: job.endTime
-        });
+        try {
+          this.panel.updateJob(jobId, { 
+            status: 'skipped',
+            endTime: job.endTime
+          });
+        } catch (error) {
+          console.error('Error marking job as skipped in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }
@@ -203,7 +254,12 @@ export class JobOutputService {
     this.jobHierarchy.clear();
     
     if (this.panel) {
-      this.panel.clearJobs();
+      try {
+        this.panel.clearJobs();
+      } catch (error) {
+        console.error('Error clearing jobs in panel:', error);
+        this.panel = undefined;
+      }
     }
   }
 
@@ -219,7 +275,12 @@ export class JobOutputService {
       Object.assign(job, updates);
       
       if (this.panel) {
-        this.panel.updateJob(jobId, updates);
+        try {
+          this.panel.updateJob(jobId, updates);
+        } catch (error) {
+          console.error('Error updating job in panel:', error);
+          this.panel = undefined;
+        }
       }
     }
   }

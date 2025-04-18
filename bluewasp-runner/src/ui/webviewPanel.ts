@@ -96,7 +96,13 @@ export class BlueWaspPanel {
   // Add a job to display
   public addJob(job: JobOutput): void {
     this._jobs.push(job);
-    this._update();
+    
+    try {
+      this._update();
+    } catch (error) {
+      console.error('Error adding job to webview:', error);
+      // If updating fails, the webview might be disposed
+    }
   }
   
   // Update an existing job
@@ -121,13 +127,25 @@ export class BlueWaspPanel {
     };
     
     updateJobRecursive(this._jobs);
-    this._update();
+    
+    try {
+      this._update();
+    } catch (error) {
+      console.error('Error updating job in webview:', error);
+      // If updating fails, the webview might be disposed
+    }
   }
   
   // Clear all jobs
   public clearJobs(): void {
     this._jobs = [];
-    this._update();
+    
+    try {
+      this._update();
+    } catch (error) {
+      console.error('Error clearing jobs in webview:', error);
+      // If updating fails, the webview might be disposed
+    }
   }
   
   // Dispose all resources
@@ -135,12 +153,22 @@ export class BlueWaspPanel {
     BlueWaspPanel.currentPanel = undefined;
     
     // Clean up resources
-    this._panel.dispose();
+    try {
+      this._panel.dispose();
+    } catch (error) {
+      // Ignore errors when disposing the panel as it might already be disposed
+      console.debug('Error while disposing panel:', error);
+    }
     
     while (this._disposables.length) {
       const disposable = this._disposables.pop();
       if (disposable) {
-        disposable.dispose();
+        try {
+          disposable.dispose();
+        } catch (error) {
+          // Ignore errors when disposing resources
+          console.debug('Error while disposing resource:', error);
+        }
       }
     }
   }
@@ -254,8 +282,15 @@ export class BlueWaspPanel {
       return;
     }
     
-    this._panel.title = 'Blue Wasp Runner';
-    this._panel.webview.html = this._getHtmlForWebview();
+    try {
+      this._panel.title = 'Blue Wasp Runner';
+      this._panel.webview.html = this._getHtmlForWebview();
+    } catch (error) {
+      console.error('Error updating webview:', error);
+      // If we catch an error here, the webview may have been disposed
+      // Attempt to clean up our references
+      this.dispose();
+    }
   }
   
   // Generate the full HTML for the webview
