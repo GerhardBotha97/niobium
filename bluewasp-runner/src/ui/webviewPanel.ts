@@ -15,6 +15,9 @@ export interface JobOutput {
   description?: string;
   command?: string;
   allowFailure?: boolean;
+  pid?: number;           // Process ID
+  childPids?: number[];   // Child process IDs
+  ports?: number[];       // Ports used by this process
 }
 
 export class BlueWaspPanel {
@@ -22,6 +25,10 @@ export class BlueWaspPanel {
   private readonly _panel: vscode.WebviewPanel;
   private _disposables: vscode.Disposable[] = [];
   private _jobs: JobOutput[] = [];
+
+  // Event emitter for kill job events
+  private _onKillJobEmitter = new vscode.EventEmitter<string>();
+  public readonly onKillJob = this._onKillJobEmitter.event;
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this._panel = panel;
@@ -50,6 +57,10 @@ export class BlueWaspPanel {
         switch (message.command) {
           case 'toggleCollapse':
             // Handle toggling collapse state
+            break;
+          case 'killJob':
+            // Handle kill job request
+            this._onKillJob(message.jobId);
             break;
         }
       },
@@ -200,14 +211,27 @@ export class BlueWaspPanel {
       : '';
     const allowFailureTag = job.allowFailure ? '<span class="allow-failure">Allow Failure</span>' : '';
     
+    // Add kill button only for running jobs - make sure job.status is accurately checked
+    const isRunning = job.status === 'running';
+    const killButton = isRunning
+      ? `<button class="kill-button" onclick="event.stopPropagation(); killJob('${job.id}')">⏹ Stop</button>` 
+      : '';
+    
+    // Process info for debugging
+    const pidInfo = job.pid 
+      ? `<span class="pid-info" title="Process ID and ports">PID: ${job.pid}${job.ports?.length ? ` (Ports: ${job.ports.join(', ')})` : ''}</span>` 
+      : '';
+    
     let html = `
-      <div class="job ${jobTypeClass} ${jobStatusClass}" data-id="${job.id}">
+      <div class="job ${jobTypeClass} ${jobStatusClass}" data-id="${job.id}" data-status="${job.status}">
         <div class="job-header" onclick="toggleJob('${job.id}')">
           <span class="status-icon">${statusIcon}</span>
           <span class="job-type">${job.type.toUpperCase()}</span>
           <span class="job-name">${job.name}</span>
           ${allowFailureTag}
           <span class="job-time">${executionTime}</span>
+          ${pidInfo}
+          ${killButton}
           <span class="collapse-icon">▼</span>
         </div>
         <div class="job-details" id="details-${job.id}">
@@ -358,12 +382,37 @@ export class BlueWaspPanel {
             margin-right: 8px;
           }
           
+          .pid-info {
+            font-size: 0.8em;
+            color: var(--vscode-descriptionForeground);
+            background-color: var(--vscode-editor-inlineValuesBackground);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 8px;
+            font-family: monospace;
+          }
+          
           .status-icon {
             margin-right: 8px;
           }
           
           .collapse-icon {
             font-size: 0.8em;
+          }
+          
+          .kill-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+            margin-right: 8px;
+          }
+          
+          .kill-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
           }
           
           .job-details {
@@ -492,6 +541,21 @@ export class BlueWaspPanel {
             });
           }
           
+          function killJob(id) {
+            // Notify the extension to kill the job
+            vscode.postMessage({
+              command: 'killJob',
+              jobId: id
+            });
+            
+            // Disable the button to prevent multiple clicks
+            const buttons = document.querySelectorAll('.job[data-id="' + id + '"] .kill-button');
+            buttons.forEach(button => {
+              button.disabled = true;
+              button.textContent = "Stopping...";
+            });
+          }
+          
           function toggleOutput(id) {
             const output = document.getElementById(id);
             const header = output.previousElementSibling;
@@ -517,5 +581,9 @@ export class BlueWaspPanel {
       </body>
       </html>
     `;
+  }
+
+  private _onKillJob(jobId: string): void {
+    this._onKillJobEmitter.fire(jobId);
   }
 } 

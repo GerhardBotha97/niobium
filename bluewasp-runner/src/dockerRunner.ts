@@ -88,6 +88,24 @@ export class DockerRunner {
         description: container.description || `Docker container: ${container.image}`,
         command: containerCommand
       });
+      
+      // Register kill handler for the container job
+      if (jobId) {
+        this.jobOutputService.registerKillHandler(jobId, async () => {
+          this.outputChannel.appendLine(`[INFO] Kill request received for container: ${container.name}`);
+          const result = await this.stopContainer(container.name);
+          
+          if (result.success) {
+            this.jobOutputService.appendOutput(jobId!, '\n[System] Container stopped successfully');
+            this.jobOutputService.completeJobSuccess(jobId!);
+          } else {
+            this.jobOutputService.appendError(jobId!, `\n[System] Failed to stop container: ${result.error || 'Unknown error'}`);
+            this.jobOutputService.completeJobFailure(jobId!);
+          }
+          
+          return;
+        });
+      }
     }
 
     try {

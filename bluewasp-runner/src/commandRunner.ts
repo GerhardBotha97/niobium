@@ -7,6 +7,8 @@ import { JobOutputService } from './ui/jobOutputService';
 import { DockerRunner } from './dockerRunner';
 import { IgnoreProvider } from './utils/ignoreUtils';
 import { sanitizeContainerName } from './utils/dockerUtils';
+import * as net from 'net';
+import * as os from 'os';
 
 const execAsync = promisify(cp.exec);
 
@@ -153,28 +155,179 @@ export class CommandRunner {
         execOptions.shell = shellExecutable;
       }
       
-      const { stdout, stderr } = await execAsync(command.command, execOptions);
-
-      // Write output to the output channel
-      if (stdout) {
-        this.outputChannel.appendLine('\n[OUTPUT]');
-        this.outputChannel.appendLine(stdout);
-        
-        // Add output to WebView if available
-        if (jobId) {
-          this.jobOutputService.appendOutput(jobId, stdout);
-        }
+      // Set up for cancelable command execution
+      let childProcess: cp.ChildProcess | null = null;
+      let canceled = false;
+      let detectedPorts: number[] = [];
+      let childPids: number[] = [];
+      
+      // Try to detect which ports this command will use
+      const detectedServerPorts = this.detectPossiblePorts(command.command);
+      if (detectedServerPorts.length > 0) {
+        this.outputChannel.appendLine(`\n[INFO] Detected possible ports: ${detectedServerPorts.join(', ')}`);
       }
       
-      if (stderr) {
-        this.outputChannel.appendLine('\n[STDERR]');
-        this.outputChannel.appendLine(stderr);
-        
-        // Add error to WebView if available
-        if (jobId) {
-          this.jobOutputService.appendError(jobId, stderr);
-        }
+      // Register kill handler if JobOutputService is available
+      if (jobId && this.jobOutputService) {
+        this.jobOutputService.registerKillHandler(jobId, async () => {
+          if (childProcess && childProcess.pid) {
+            this.outputChannel.appendLine(`\n[INFO] Kill request received for command: ${command.name}`);
+            canceled = true;
+            
+            try {
+              await this.killProcessAndChildren(childProcess, command, detectedPorts, childPids);
+              
+              this.jobOutputService.appendOutput(jobId!, '\n[System] Command terminated by user');
+              this.jobOutputService.completeJobFailure(jobId!, 130); // 130 is the exit code for SIGTERM
+            } catch (killError) {
+              const errorMessage = killError instanceof Error ? killError.message : String(killError);
+              this.outputChannel.appendLine(`\n[ERROR] Failed to kill process: ${errorMessage}`);
+              this.jobOutputService.appendError(jobId!, `\n[System] Failed to terminate command: ${errorMessage}`);
+              this.jobOutputService.completeJobFailure(jobId!, 1);
+            }
+          }
+        });
       }
+      
+      // Custom promise-based exec with cancellation support
+      const execResult = await new Promise<{stdout: string, stderr: string, code: number}>((resolve, reject) => {
+        // If on Unix systems, spawn with options for process group management
+        const execOptionsWithDetached = process.platform !== 'win32' 
+          ? { ...execOptions, windowsHide: true } 
+          : execOptions;
+        
+        childProcess = cp.exec(command.command, execOptionsWithDetached);
+        
+        // Update the job with PID information
+        if (childProcess && childProcess.pid && jobId) {
+          this.outputChannel.appendLine(`\n[INFO] Process started with PID: ${childProcess.pid}`);
+          this.jobOutputService.updateJob(jobId, {
+            pid: childProcess.pid,
+            ports: detectedServerPorts
+          });
+        }
+        
+        // Set up periodic checks to detect child processes and port usage
+        const portCheckInterval = setInterval(async () => {
+          if (!childProcess || !childProcess.pid) {
+            clearInterval(portCheckInterval);
+            return;
+          }
+          
+          try {
+            // Check for processes that are children of our main process
+            const newChildPids = await this.findChildProcesses(childProcess.pid);
+            if (newChildPids.length > 0) {
+              const newPids = newChildPids.filter(pid => !childPids.includes(pid));
+              if (newPids.length > 0) {
+                childPids = [...childPids, ...newPids];
+                this.outputChannel.appendLine(`\n[INFO] Detected child processes: ${newPids.join(', ')}`);
+                
+                if (jobId) {
+                  this.jobOutputService.updateJob(jobId, { childPids });
+                }
+              }
+            }
+            
+            // Check for ports that have been opened by our process tree
+            if (detectedServerPorts.length > 0) {
+              const allPids = [childProcess.pid, ...childPids];
+              const activePortsInfo = await this.checkPortsInUse(detectedServerPorts, allPids);
+              
+              if (activePortsInfo.length > 0) {
+                const currentPorts = activePortsInfo.map(p => p.port);
+                const newPorts = currentPorts.filter(port => !detectedPorts.includes(port));
+                
+                if (newPorts.length > 0) {
+                  detectedPorts = [...detectedPorts, ...newPorts];
+                  this.outputChannel.appendLine(`\n[INFO] Detected active ports: ${newPorts.join(', ')}`);
+                  
+                  if (jobId) {
+                    this.jobOutputService.updateJob(jobId, { ports: detectedPorts });
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            // Ignore errors in the background checks
+          }
+        }, 2000);
+        
+        let stdout = '';
+        let stderr = '';
+        
+        childProcess.stdout?.on('data', (data) => {
+          const text = data.toString();
+          stdout += text;
+          
+          // Scan output for port information
+          const portMatches = text.match(/(?:listening on|running on|localhost:|server running|started on|listening at|bound to|port\s*:)(?:.*?)(\d{2,5})/gi);
+          if (portMatches) {
+            portMatches.forEach((match: string) => {
+              const portMatch = match.match(/(\d{2,5})/);
+              if (portMatch && portMatch[1]) {
+                const port = parseInt(portMatch[1], 10);
+                if (port > 0 && port < 65536 && !detectedPorts.includes(port)) {
+                  detectedPorts.push(port);
+                  this.outputChannel.appendLine(`\n[INFO] Detected port from output: ${port}`);
+                  
+                  if (jobId) {
+                    this.jobOutputService.updateJob(jobId, { ports: detectedPorts });
+                  }
+                }
+              }
+            });
+          }
+          
+          // Show real-time output
+          this.outputChannel.append(text);
+          
+          // Add output to WebView if available
+          if (jobId) {
+            this.jobOutputService.appendOutput(jobId, text);
+          }
+        });
+        
+        childProcess.stderr?.on('data', (data) => {
+          const text = data.toString();
+          stderr += text;
+          
+          // Show real-time output
+          this.outputChannel.append(text);
+          
+          // Add error to WebView if available
+          if (jobId) {
+            this.jobOutputService.appendError(jobId, text);
+          }
+        });
+        
+        childProcess.on('close', (code) => {
+          clearInterval(portCheckInterval);
+          
+          if (canceled) {
+            // If the command was canceled, we've already handled this case
+            return;
+          }
+          
+          if (code === 0) {
+            resolve({ stdout, stderr, code });
+          } else {
+            const error: any = new Error(`Command failed with exit code ${code}`);
+            error.code = code;
+            error.stdout = stdout;
+            error.stderr = stderr;
+            reject(error);
+          }
+        });
+        
+        childProcess.on('error', (error) => {
+          clearInterval(portCheckInterval);
+          reject(error);
+        });
+      });
+      
+      // Write output to the output channel
+      // No need to append stdout/stderr again as we've already done it in real-time
       
       // Record end time
       const endTime = new Date();
@@ -194,7 +347,7 @@ export class CommandRunner {
       // Return successful result
       return {
         success: true,
-        output: stdout,
+        output: execResult.stdout,
         exitCode: 0
       };
     } catch (error) {
@@ -574,5 +727,420 @@ export class CommandRunner {
         };
       }
     }
+  }
+
+  /**
+   * Kill a process, its children, and processes using the same ports
+   */
+  private async killProcessAndChildren(
+    childProcess: cp.ChildProcess, 
+    command: CommandConfig, 
+    detectedPorts: number[] = [], 
+    childPids: number[] = []
+  ): Promise<void> {
+    if (!childProcess.pid) return;
+    
+    this.outputChannel.appendLine(`\n[INFO] Attempting to kill process ${childProcess.pid} and its children`);
+    
+    // Build up a full list of target PIDs
+    const allPids = new Set<number>([childProcess.pid, ...childPids]);
+    
+    // Find any additional child processes we might have missed
+    try {
+      const additionalPids = await this.findChildProcesses(childProcess.pid);
+      additionalPids.forEach(pid => allPids.add(pid));
+    } catch (e) {
+      // Ignore errors finding child processes
+    }
+    
+    this.outputChannel.appendLine(`\n[INFO] Target PIDs: ${[...allPids].join(', ')}`);
+    
+    // Ensure we check the most common Node.js server ports for Vite and Express/Node
+    const criticalPorts = new Set([...detectedPorts]);
+    if (command.command.includes('npm run dev') || command.command.includes('vite')) {
+      criticalPorts.add(5173); // Vite default
+    }
+    if (command.command.includes('npm run start') || command.command.includes('node server')) {
+      criticalPorts.add(5000); // Default in the shown output
+      criticalPorts.add(3000); // Common Express/React port
+    }
+    
+    // Check if any specific ports are being used and find those processes
+    if (criticalPorts.size > 0) {
+      try {
+        const portsArray = [...criticalPorts];
+        this.outputChannel.appendLine(`\n[INFO] Checking port usage for ports: ${portsArray.join(', ')}`);
+        const portInfo = await this.checkPortsInUse(portsArray);
+        
+        for (const info of portInfo) {
+          this.outputChannel.appendLine(`\n[INFO] Port ${info.port} used by PID: ${info.pid}`);
+          if (info.pid && !allPids.has(info.pid)) {
+            allPids.add(info.pid);
+            
+            try {
+              // Also get any child processes of this port-using process
+              const morePids = await this.findChildProcesses(info.pid);
+              morePids.forEach(pid => allPids.add(pid));
+            } catch (e) {
+              // Ignore errors finding child processes
+            }
+          }
+        }
+      } catch (e) {
+        this.outputChannel.appendLine(`\n[WARNING] Error checking port usage: ${e}`);
+      }
+    }
+    
+    // Now we have a list of all processes to kill, including:
+    // 1. The main process
+    // 2. All its children
+    // 3. Any process using the detected ports
+    // 4. Children of those port-using processes
+    
+    if (process.platform === 'win32') {
+      // Windows process killing
+      for (const pid of allPids) {
+        try {
+          await new Promise<void>(resolve => {
+            cp.exec(`taskkill /pid ${pid} /T /F`, (error) => {
+              if (error) {
+                this.outputChannel.appendLine(`\n[WARNING] Error killing PID ${pid}: ${error.message}`);
+              } else {
+                this.outputChannel.appendLine(`\n[INFO] Successfully killed PID ${pid}`);
+              }
+              resolve();
+            });
+          });
+        } catch (e) {
+          // Ignore individual kill errors
+        }
+      }
+      
+      // Additional process killing for Node.js-based commands
+      if (command.command.includes('npm') || command.command.includes('node')) {
+        const scriptName = command.command.match(/(?:npm run\s+|node\s+)(\w+)/)?.[1];
+        
+        if (scriptName) {
+          this.outputChannel.appendLine(`\n[INFO] Additional cleanup for Node.js script: ${scriptName}`);
+          try {
+            await new Promise<void>(resolve => {
+              cp.exec(`taskkill /F /FI "IMAGENAME eq node.exe" /FI "WINDOWTITLE eq *${scriptName}*"`, () => {
+                this.outputChannel.appendLine(`\n[INFO] Completed Node.js process cleanup`);
+                resolve();
+              });
+            });
+          } catch (e) {
+            // Ignore errors in auxiliary cleanup
+          }
+        }
+      }
+      
+      // Kill processes by port (Windows)
+      for (const port of detectedPorts) {
+        try {
+          await new Promise<void>(resolve => {
+            cp.exec(`for /f "tokens=5" %a in ('netstat -aon ^| find ":${port}"') do taskkill /F /PID %a`, () => {
+              this.outputChannel.appendLine(`\n[INFO] Attempted cleanup of processes using port ${port}`);
+              resolve();
+            });
+          });
+        } catch (e) {
+          // Ignore errors in auxiliary cleanup
+        }
+      }
+      
+      // Final failsafe - directly kill any processes on critical ports
+      // This is a last resort if the regular killing didn't work
+      for (const port of criticalPorts) {
+        try {
+          await new Promise<void>(resolve => {
+            // This is more aggressive and will kill any process holding the port
+            cp.exec(`for /f "tokens=5" %a in ('netstat -aon ^| find ":${port} "') do taskkill /F /PID %a`, () => {
+              this.outputChannel.appendLine(`\n[INFO] Forced cleanup of processes using port ${port}`);
+              resolve();
+            });
+          });
+        } catch (e) {
+          // Ignore errors in cleanup
+        }
+      }
+    } else {
+      // Unix process killing - more straightforward
+      for (const pid of allPids) {
+        try {
+          process.kill(pid, 'SIGTERM');
+          this.outputChannel.appendLine(`\n[INFO] Sent SIGTERM to PID ${pid}`);
+        } catch (e) {
+          // Process might already be gone
+        }
+      }
+      
+      // Allow a small delay for SIGTERM to work
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Follow up with SIGKILL for any process that didn't terminate
+      for (const pid of allPids) {
+        try {
+          process.kill(pid, 'SIGKILL');
+          this.outputChannel.appendLine(`\n[INFO] Sent SIGKILL to PID ${pid}`);
+        } catch (e) {
+          // Process might already be gone, which is good
+        }
+      }
+      
+      // Also try killing by port (Unix)
+      for (const port of detectedPorts) {
+        try {
+          await new Promise<void>(resolve => {
+            cp.exec(`lsof -i:${port} -t | xargs kill -9`, () => {
+              this.outputChannel.appendLine(`\n[INFO] Attempted cleanup of processes using port ${port}`);
+              resolve();
+            });
+          });
+        } catch (e) {
+          // Ignore errors in auxiliary cleanup
+        }
+      }
+      
+      // Kill any related npm/node processes
+      if (command.command.includes('npm') || command.command.includes('node')) {
+        const scriptName = command.command.match(/(?:npm run\s+|node\s+)(\w+)/)?.[1];
+        
+        if (scriptName) {
+          this.outputChannel.appendLine(`\n[INFO] Additional cleanup for Node.js script: ${scriptName}`);
+          try {
+            await new Promise<void>(resolve => {
+              cp.exec(`pkill -f "node.*${scriptName}"`, () => {
+                this.outputChannel.appendLine(`\n[INFO] Completed Node.js process cleanup`);
+                resolve();
+              });
+            });
+          } catch (e) {
+            // Ignore errors in auxiliary cleanup
+          }
+        }
+      }
+      
+      // Final failsafe - directly kill any processes on critical ports
+      // This is a last resort if the regular killing didn't work
+      for (const port of criticalPorts) {
+        try {
+          await new Promise<void>(resolve => {
+            // More aggressive direct kill of processes bound to the port
+            cp.exec(`lsof -ti:${port} | xargs kill -9`, () => {
+              this.outputChannel.appendLine(`\n[INFO] Forced cleanup of processes using port ${port}`);
+              resolve();
+            });
+          });
+        } catch (e) {
+          // Ignore errors in cleanup
+        }
+      }
+    }
+    
+    this.outputChannel.appendLine(`\n[INFO] Process termination completed`);
+  }
+  
+  /**
+   * Detect possible ports from a command string
+   */
+  private detectPossiblePorts(command: string): number[] {
+    const ports: number[] = [];
+    
+    // Common default ports 
+    if (command.includes('npm run dev') || command.includes('vite')) {
+      ports.push(5173); // Vite default port
+    }
+    
+    if (command.includes('npm run start') || command.includes('node server')) {
+      ports.push(5000, 3000, 8000, 8080); // Common server ports
+    }
+    
+    // Look for explicit port definitions
+    const portMatches = command.match(/(?:PORT|port)=(\d{2,5})/g);
+    if (portMatches) {
+      portMatches.forEach(match => {
+        const port = parseInt(match.split('=')[1], 10);
+        if (port > 0 && port < 65536 && !ports.includes(port)) {
+          ports.push(port);
+        }
+      });
+    }
+    
+    return ports;
+  }
+  
+  /**
+   * Check if specified ports are in use and by which process
+   */
+  private async checkPortsInUse(ports: number[], filterPids: number[] = []): Promise<Array<{port: number, pid: number}>> {
+    const result: Array<{port: number, pid: number}> = [];
+    
+    if (process.platform === 'win32') {
+      // Windows implementation
+      const promises = ports.map(async (port) => {
+        return new Promise<void>((resolve) => {
+          cp.exec(`netstat -ano | findstr :${port}`, (error, stdout) => {
+            if (!error && stdout) {
+              const lines = stdout.trim().split('\n');
+              for (const line of lines) {
+                // Parse the PID from the last column of netstat output
+                const match = line.trim().match(/(\d+)$/);
+                if (match && match[1]) {
+                  const pid = parseInt(match[1], 10);
+                  if (!isNaN(pid) && (!filterPids.length || filterPids.includes(pid))) {
+                    result.push({ port, pid });
+                    break;
+                  }
+                }
+              }
+            }
+            resolve();
+          });
+        });
+      });
+      
+      await Promise.all(promises);
+    } else {
+      // Unix implementation
+      const promises = ports.map(async (port) => {
+        return new Promise<void>((resolve) => {
+          cp.exec(`lsof -i:${port} -P -n -t`, (error, stdout) => {
+            if (!error && stdout) {
+              const pid = parseInt(stdout.trim(), 10);
+              if (!isNaN(pid) && (!filterPids.length || filterPids.includes(pid))) {
+                result.push({ port, pid });
+              }
+            }
+            resolve();
+          });
+        });
+      });
+      
+      await Promise.all(promises);
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Find child processes of a given PID
+   */
+  private async findChildProcesses(pid: number): Promise<number[]> {
+    const childPids: number[] = [];
+    
+    if (process.platform === 'win32') {
+      // Windows implementation
+      try {
+        // Use WMIC to find child processes on Windows
+        const { stdout } = await new Promise<{stdout: string, stderr: string}>((resolve, reject) => {
+          cp.exec(`wmic process where (ParentProcessId=${pid}) get ProcessId`, (error, stdout, stderr) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve({ stdout, stderr });
+            }
+          });
+        });
+        
+        const lines = stdout.trim().split('\n').slice(1); // Skip header line
+        for (const line of lines) {
+          const childPid = parseInt(line.trim(), 10);
+          if (!isNaN(childPid)) {
+            childPids.push(childPid);
+            
+            // Recursively get children of this child process
+            try {
+              const grandchildren = await this.findChildProcesses(childPid);
+              childPids.push(...grandchildren);
+            } catch (e) {
+              // Ignore errors in recursive calls
+            }
+          }
+        }
+      } catch (e) {
+        // Fallback to PowerShell if WMIC fails
+        try {
+          const { stdout } = await new Promise<{stdout: string, stderr: string}>((resolve, reject) => {
+            cp.exec(`powershell "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | Select-Object -ExpandProperty ProcessId"`, 
+              (error, stdout, stderr) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve({ stdout, stderr });
+                }
+              });
+          });
+          
+          const lines = stdout.trim().split('\n');
+          for (const line of lines) {
+            const childPid = parseInt(line.trim(), 10);
+            if (!isNaN(childPid)) {
+              childPids.push(childPid);
+            }
+          }
+        } catch (e2) {
+          // If both methods fail, return empty array
+        }
+      }
+    } else {
+      // Unix implementation
+      try {
+        const { stdout } = await new Promise<{stdout: string, stderr: string}>((resolve, reject) => {
+          cp.exec(`pgrep -P ${pid}`, (error, stdout, stderr) => {
+            if (error && error.code !== 1) { // pgrep returns 1 if no processes match
+              reject(error);
+            } else {
+              resolve({ stdout, stderr });
+            }
+          });
+        });
+        
+        const lines = stdout.trim().split('\n');
+        for (const line of lines) {
+          if (line.trim()) {
+            const childPid = parseInt(line.trim(), 10);
+            if (!isNaN(childPid)) {
+              childPids.push(childPid);
+              
+              // Recursively get children of this child process
+              try {
+                const grandchildren = await this.findChildProcesses(childPid);
+                childPids.push(...grandchildren);
+              } catch (e) {
+                // Ignore errors in recursive calls
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // If pgrep fails, try ps
+        try {
+          const { stdout } = await new Promise<{stdout: string, stderr: string}>((resolve, reject) => {
+            cp.exec(`ps -o pid --ppid ${pid} --no-headers`, (error, stdout, stderr) => {
+              if (error) {
+                reject(error);
+              } else {
+                resolve({ stdout, stderr });
+              }
+            });
+          });
+          
+          const lines = stdout.trim().split('\n');
+          for (const line of lines) {
+            if (line.trim()) {
+              const childPid = parseInt(line.trim(), 10);
+              if (!isNaN(childPid)) {
+                childPids.push(childPid);
+              }
+            }
+          }
+        } catch (e2) {
+          // If both methods fail, return empty array
+        }
+      }
+    }
+    
+    return childPids;
   }
 } 
