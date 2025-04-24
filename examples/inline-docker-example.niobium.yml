@@ -1,0 +1,71 @@
+# Example .bluewasp.yml with inline Docker commands in stages
+
+commands:
+  - name: hello
+    description: Print a hello message
+    command: echo "Hello, World!"
+
+# Define stages with inline Docker commands
+stages:
+  - name: test-inline-docker
+    description: Test using inline Docker commands
+    commands:
+      # Regular command
+      - name: hello
+        command: echo "Running inline commands"
+      
+      # Inline Docker command
+      - name: python-inline
+        description: Run Python script inline
+        image: python
+        image_tag: 3.9-alpine
+        volumes:
+          - source: ./scripts
+            target: /app
+        workdir: /app
+        command: python -c "print('Hello from inline Python container')"
+        remove_after_run: true
+      
+      # Another inline Docker command
+      - name: node-inline
+        description: Run Node.js script inline
+        image: node
+        image_tag: 16-alpine
+        volumes:
+          - source: ./app
+            target: /app
+        workdir: /app
+        command: node -e "console.log('Hello from inline Node.js container')"
+        remove_after_run: true
+        
+  - name: database-test
+    description: Test with a database
+    commands:
+      # Start a PostgreSQL container
+      - name: postgres-inline
+        description: Start PostgreSQL database
+        image: postgres
+        image_tag: 13-alpine
+        ports:
+          - host: 5432
+            container: 5432
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: test
+      
+      # Run tests that connect to the database
+      - name: run-tests
+        command: npm test
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: test
+        allow_failure: true
+      
+      # Stop and remove the database container
+      - name: cleanup-postgres
+        command: docker stop postgres-inline && docker rm postgres-inline
+        allow_failure: true 

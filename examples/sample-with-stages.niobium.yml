@@ -1,0 +1,96 @@
+# Blue Wasp configuration file with stages and sequences
+
+# Individual commands - can be run directly or referenced in stages
+commands:
+  - name: Install Dependencies
+    description: Install project dependencies
+    command: npm install
+  
+  - name: Lint Project
+    description: Run linting on the project
+    command: npm run lint
+  
+  - name: Run Tests
+    description: Run all project tests
+    command: npm test
+  
+  - name: Build Project
+    description: Build the project for production
+    command: npm run build
+  
+  - name: Start Dev Server
+    description: Start the development server
+    command: npm run dev
+  
+  - name: Deploy Staging
+    description: Deploy to staging environment
+    command: npm run deploy:staging
+    env:
+      NODE_ENV: staging
+  
+  - name: Deploy Production
+    description: Deploy to production environment
+    command: npm run deploy:production
+    env:
+      NODE_ENV: production
+
+# Stages group multiple commands together
+stages:
+  - name: Validate
+    description: Validate project code
+    commands:
+      - Lint Project
+      - Run Tests
+  
+  - name: Setup Project
+    description: Set up the project
+    commands:
+      - Install Dependencies
+      - Build Project
+  
+  - name: Dev Environment
+    description: Set up development environment
+    commands:
+      - Install Dependencies
+      - Start Dev Server
+  
+  - name: Staging Deployment
+    description: Build and deploy to staging
+    commands:
+      - Install Dependencies
+      - Lint Project
+      - Run Tests
+      - Build Project
+      - Deploy Staging
+  
+  - name: Production Deployment
+    description: Complete production deployment pipeline
+    commands:
+      - name: Clean Build Directory
+        command: rm -rf ./dist
+      - Install Dependencies
+      - Lint Project
+      - Run Tests
+      - Build Project
+      - Deploy Production
+
+# Sequences chain multiple stages together
+sequences:
+  - name: Full CI Pipeline
+    description: Run the complete CI pipeline
+    stages:
+      - Validate
+      - Setup Project
+  
+  - name: Complete Release
+    description: Perform a complete release cycle
+    stages:
+      - Validate
+      - Staging Deployment
+      - Production Deployment
+  
+  - name: Quick Dev Start
+    description: Quickly start development
+    stages:
+      - Setup Project
+      - Dev Environment 

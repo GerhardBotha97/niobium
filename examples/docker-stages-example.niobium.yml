@@ -1,0 +1,80 @@
+# Example .bluewasp.yml configuration with Docker containers in stages
+
+# Regular commands
+commands:
+  - name: hello
+    description: Print a hello message
+    command: echo "Hello, World!"
+
+  - name: list-files
+    description: List files in the current directory
+    command: ls -la
+
+  # Docker commands - run Docker images
+  - name: run-node-script
+    description: Run a Node.js script in a container
+    # No command is needed if running with default entrypoint
+    image: node
+    image_tag: 16-alpine
+    container_name: node-runner
+    volumes:
+      - source: ./scripts
+        target: /app
+    workdir: /app
+    command: node index.js
+    remove_after_run: true
+    
+  - name: run-python-script
+    description: Run a Python script in a container
+    image: python
+    image_tag: 3.9-alpine
+    volumes:
+      - source: ./scripts
+        target: /app
+    workdir: /app
+    command: python process.py
+    env:
+      DEBUG: "true"
+    remove_after_run: true
+    
+  - name: run-test-database
+    description: Start a temporary PostgreSQL database
+    image: postgres
+    image_tag: 13-alpine
+    ports:
+      - host: 5432
+        container: 5432
+    env:
+      POSTGRES_PASSWORD: test
+      POSTGRES_USER: test
+      POSTGRES_DB: test
+    # Not removing after run keeps the database running
+
+# Define stages that combine regular and Docker commands
+stages:
+  - name: dev-setup
+    description: Set up the development environment
+    commands:
+      - hello
+      - list-files
+      - run-node-script
+      
+  - name: test-database
+    description: Run tests with a temporary database
+    commands:
+      - run-test-database
+      # Add test commands that connect to the database
+      
+  - name: process-data
+    description: Process data with Python
+    commands:
+      - list-files 
+      - run-python-script
+      
+# Define sequences
+sequences:
+  - name: setup-and-process
+    description: Set up environment and process data
+    stages:
+      - dev-setup
+      - process-data 

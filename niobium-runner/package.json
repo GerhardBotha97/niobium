@@ -1,0 +1,290 @@
+{
+  "name": "niobium-runner",
+  "displayName": "Niobium Runner",
+  "description": "Configurable command runner using .niobium.yml files",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:niobium-runner.run",
+    "onCommand:niobium-runner.runStage",
+    "onCommand:niobium-runner.runSequence",
+    "onCommand:niobium-runner.runAll",
+    "onCommand:niobium-runner.showOutput",
+    "onCommand:niobium-runner.showJobVisualizer",
+    "onCommand:niobium-runner.showRunner",
+    "onCommand:niobium-runner.runContainer",
+    "onCommand:niobium-runner.stopContainer",
+    "onCommand:niobium-runner.removeContainer",
+    "onCommand:niobium-runner.viewContainerLogs",
+    "onCommand:niobium-runner.showDockerOutput",
+    "onCommand:niobium-runner.addDockerContainer",
+    "onCommand:niobium-runner.runSpecificCommand",
+    "onCommand:niobium-runner.runSpecificStage",
+    "onCommand:niobium-runner.runSpecificSequence",
+    "onCommand:niobium-runner.refreshViews",
+    "onCommand:niobium-runner.startContainer",
+    "workspaceContains:.niobium.yml",
+    "onView:niobium-dashboard",
+    "onView:niobium-container"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "niobium-sidebar",
+          "title": "Niobium",
+          "icon": "media/wasp-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "niobium-sidebar": [
+        {
+          "id": "niobium-dashboard",
+          "name": "Dashboard",
+          "icon": "media/wasp-icon.svg",
+          "contextualTitle": "Blue Wasp Dashboard",
+          "when": "workbenchState != empty"
+        },
+        {
+          "id": "niobium-container",
+          "name": "Containers",
+          "icon": "media/wasp-icon.svg",
+          "contextualTitle": "Docker Containers",
+          "when": "workbenchState != empty"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "niobium-runner.refreshViews",
+          "when": "view == niobium-dashboard || view == niobium-container",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.showDashboard",
+          "when": "view == niobium-dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.showRunner",
+          "when": "view == niobium-dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.addDockerContainer",
+          "when": "view == niobium-container",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "niobium-runner.runSpecificCommand",
+          "when": "view == niobium-dashboard && viewItem == niobium-command",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.runSpecificStage",
+          "when": "view == niobium-dashboard && viewItem == niobium-stage",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.runSpecificSequence",
+          "when": "view == niobium-dashboard && viewItem == niobium-sequence",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.startContainer",
+          "when": "view == niobium-container && viewItem == container",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.stopContainer",
+          "when": "view == niobium-container && viewItem == container",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.viewContainerLogs",
+          "when": "view == niobium-container && viewItem == container",
+          "group": "1@1"
+        },
+        {
+          "command": "niobium-runner.removeContainer",
+          "when": "view == niobium-container && viewItem == container",
+          "group": "1@2"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "niobium-runner.showDashboard",
+        "title": "Niobium: Show Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "niobium-runner.showRunner",
+        "title": "Niobium: Show Runner",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "niobium-runner.refreshViews",
+        "title": "Niobium: Refresh Views",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "niobium-runner.run",
+        "title": "Niobium: Run Command"
+      },
+      {
+        "command": "niobium-runner.runStage",
+        "title": "Niobium: Run Stage"
+      },
+      {
+        "command": "niobium-runner.runSequence",
+        "title": "Niobium: Run Sequence"
+      },
+      {
+        "command": "niobium-runner.runAll",
+        "title": "Niobium: Run (All Types)"
+      },
+      {
+        "command": "niobium-runner.showOutput",
+        "title": "Niobium: Show Output Panel"
+      },
+      {
+        "command": "niobium-runner.showJobVisualizer",
+        "title": "Niobium: Show Job Visualizer"
+      },
+      {
+        "command": "niobium-runner.runContainer",
+        "title": "Niobium: Run Docker Container"
+      },
+      {
+        "command": "niobium-runner.stopContainer",
+        "title": "Niobium: Stop Docker Container",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "niobium-runner.removeContainer",
+        "title": "Niobium: Remove Docker Container"
+      },
+      {
+        "command": "niobium-runner.viewContainerLogs",
+        "title": "Niobium: View Docker Container Logs"
+      },
+      {
+        "command": "niobium-runner.showDockerOutput",
+        "title": "Niobium: Show Docker Output"
+      },
+      {
+        "command": "niobium-runner.addDockerContainer",
+        "title": "Niobium: Add Docker Container",
+        "icon": "$(add)"
+      },
+      {
+        "command": "niobium-runner.runSpecificCommand",
+        "title": "Niobium: Run Command",
+        "icon": "$(play)"
+      },
+      {
+        "command": "niobium-runner.runSpecificStage",
+        "title": "Niobium: Run Stage",
+        "icon": "$(play)"
+      },
+      {
+        "command": "niobium-runner.runSpecificSequence",
+        "title": "Niobium: Run Sequence",
+        "icon": "$(play)"
+      },
+      {
+        "command": "niobium-runner.startContainer",
+        "title": "Niobium: Start Container",
+        "icon": "$(play)"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "niobium-icons",
+        "label": "Blue Wasp Icons",
+        "path": "./media/wasp-codicon.json"
+      }
+    ],
+    "iconFonts": [
+      {
+        "id": "niobium-font",
+        "src": [
+          {
+            "path": "./media/wasp-icon.svg",
+            "format": "svg"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Niobium Runner",
+      "properties": {
+        "niobium-runner.configFile": {
+          "type": "string",
+          "default": ".niobium.yml",
+          "description": "The name of the configuration file"
+        },
+        "niobium-runner.dockerPath": {
+          "type": "string",
+          "default": "docker",
+          "description": "Path to the Docker executable"
+        },
+        "niobium-runner.logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Log level for Niobium Runner"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "lint": "eslint src --ext ts",
+    "vsce-package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.24",
+    "@types/glob": "^7.1.3",
+    "@types/node": "^16.18.126",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^5.30.0",
+    "@typescript-eslint/parser": "^5.30.0",
+    "@vscode/vsce": "^2.19.0",
+    "copy-webpack-plugin": "^13.0.0",
+    "eslint": "^8.18.0",
+    "glob": "^8.0.3",
+    "ts-loader": "^9.3.1",
+    "typescript": "^4.7.4",
+    "uuid": "^11.1.0",
+    "webpack": "^5.73.0",
+    "webpack-cli": "^4.10.0"
+  },
+  "dependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "dockerode": "^3.3.5",
+    "js-yaml": "^4.1.0"
+  },
+  "publisher": "niobiumrunner",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/niobium-runner.git"
+  }
+}
