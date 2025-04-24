@@ -704,7 +704,7 @@ export class DockerRunner {
   /**
    * Helper method to find a container by name
    */
-  private async findContainer(name: string): Promise<Dockerode.Container | undefined> {
+  public async findContainer(name: string): Promise<Dockerode.Container | undefined> {
     // Sanitize the name for consistency with how containers are created
     const sanitizedName = sanitizeContainerName(name);
     

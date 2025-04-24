@@ -1,0 +1,51 @@
+# Example Niobium Runner Configuration
+commands:
+  - name: security-scan
+    description: Run a security scan on the codebase
+    command: npm audit --json
+    output_file: security-scan-results.json
+
+  - name: dependency-check
+    description: Check dependencies for vulnerabilities
+    command: npm outdated --json
+    output_file: dependency-check-${DATE}.json
+    env:
+      DATE: "$(date +%Y-%m-%d)"
+
+  - name: lint-check
+    description: Run linting with output file
+    command: eslint . --format json
+    output_file: lint-results.json
+
+  - name: docker-security-scan
+    description: Run security scan in Docker container
+    image: aquasec/trivy
+    image_tag: latest
+    command: filesystem --format json /app
+    output_file: trivy-scan-results.json
+    volumes:
+      - source: .
+        target: /app
+
+stages:
+  - name: security
+    description: Run all security checks
+    commands:
+      - security-scan
+      - dependency-check
+      - docker-security-scan
+
+  - name: code-quality
+    description: Run code quality checks
+    commands:
+      - lint-check
+
+sequences:
+  - name: full-scan
+    description: Run full security and code quality scan
+    stages:
+      - security
+      - code-quality
+
+variables:
+  PROJECT_NAME: niobium-runner 

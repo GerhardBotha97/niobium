@@ -11,6 +11,7 @@ export interface CommandConfig {
   env?: Record<string, string>;
   shell?: boolean;
   allow_failure?: boolean;
+  output_file?: string;
   // Docker integration
   image?: string;
   image_tag?: string;

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 import { CommandConfig, StageConfig, ConfigProvider, NiobiumConfig, DockerContainerConfig, VariableManager } from './configProvider';
 import { promisify } from 'util';
 import { JobOutputService } from './ui/jobOutputService';
@@ -135,6 +136,40 @@ export class CommandRunner {
     }
     
     return true;
+  }
+
+  // New method to save command output to a file
+  private async saveOutputToFile(command: CommandConfig, output: string, workspaceRoot: string): Promise<void> {
+    if (!command.output_file) {
+      return;
+    }
+    
+    try {
+      // Process variables in the output file path
+      const processedOutputFile = this.processVariables(command.output_file);
+      
+      // Create .niobium_results directory if it doesn't exist
+      const resultsDir = path.join(workspaceRoot, '.niobium_results');
+      if (!fs.existsSync(resultsDir)) {
+        fs.mkdirSync(resultsDir, { recursive: true });
+      }
+      
+      // Construct the full output file path
+      const outputFilePath = path.join(resultsDir, processedOutputFile);
+      
+      // Create subdirectories if needed
+      const outputDirPath = path.dirname(outputFilePath);
+      if (!fs.existsSync(outputDirPath)) {
+        fs.mkdirSync(outputDirPath, { recursive: true });
+      }
+      
+      // Write the output to the file
+      fs.writeFileSync(outputFilePath, output);
+      
+      this.outputChannel.appendLine(`\n[Output] Results saved to ${outputFilePath}`);
+    } catch (error) {
+      this.outputChannel.appendLine(`\n[ERROR] Failed to save output to file: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async runCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
@@ -417,6 +452,9 @@ export class CommandRunner {
       // Extract output variables if specified in the command
       this.extractOutputVariables(command, execResult.stdout);
       
+      // Save output to file if output_file is specified
+      await this.saveOutputToFile(command, execResult.stdout, workspaceRoot);
+      
       // Write output to the output channel
       // No need to append stdout/stderr again as we've already done it in real-time
       
@@ -451,6 +489,9 @@ export class CommandRunner {
       if (stdout) {
         this.outputChannel.appendLine('\n[OUTPUT]');
         this.outputChannel.appendLine(stdout);
+        
+        // Save output to file even on failure if output_file is specified
+        await this.saveOutputToFile(command, stdout, workspaceRoot);
         
         // Add output to WebView if available
         if (jobId) {
@@ -798,45 +839,87 @@ export class CommandRunner {
       environment: command.env,
       remove_when_stopped: command.remove_after_run
     };
+
+    // Record start time
+    const startTime = new Date();
+    this.outputChannel.appendLine(`Starting at: ${startTime.toLocaleTimeString()}`);
     
+    // Create job in web view if JobOutputService is available
+    let jobId: string | undefined;
+    if (this.jobOutputService) {
+      this.jobOutputService.showPanel();
+      jobId = this.jobOutputService.startCommand(command);
+    }
+
     try {
-      // Start the container
-      const result = await this.dockerRunner.startContainer(containerConfig, workspaceRoot);
+      // Check if docker is available
+      const dockerResult = await this.dockerRunner.startContainer(containerConfig, workspaceRoot);
       
-      // If configured to remove after run and it was successful, remove the container
-      if (command.remove_after_run && result.success && result.containerId) {
+      if (!dockerResult.success) {
+        throw new Error(dockerResult.error || 'Unknown Docker error');
+      }
+
+      // Get the container if it exists
+      const container = await this.dockerRunner.findContainer(containerConfig.name);
+      if (!container) {
+        throw new Error(`Container ${containerConfig.name} not found`);
+      }
+      
+      // For one-off commands that exit quickly, wait for the container to complete
+      // and capture the output
+      if (containerConfig.command) {
+        // Output a message that we're running the command
+        this.outputChannel.appendLine(`\n[COMMAND] ${containerConfig.command}`);
+        
+        // Wait for the container to exit without a timeout
+        await container.wait();
+        
+        // Get the logs immediately after the container has exited
+        const logStream = await container.logs({
+          follow: false,
+          stdout: true,
+          stderr: true,
+          tail: -1  // Use -1 to get all logs
+        });
+        
+        const logs = logStream.toString();
+        this.outputChannel.appendLine(`\n[OUTPUT]`);
+        this.outputChannel.appendLine(logs);
+        
+        // Save output to file if output_file is specified
+        await this.saveOutputToFile(command, logs, workspaceRoot);
+        
+        if (jobId) {
+          this.jobOutputService.appendOutput(jobId, logs);
+        }
+      }
+      
+      // Return successful result
+      return {
+        success: true,
+        output: dockerResult.output,
+        exitCode: 0
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.outputChannel.appendLine(`\n[ERROR] ${errorMessage}`);
+      
+      if (jobId) {
+        this.jobOutputService.appendError(jobId, errorMessage);
+        this.jobOutputService.completeJobFailure(jobId, 1);
+      }
+      
+      // Clean up container if needed
+      if (containerConfig.remove_when_stopped) {
         await this.dockerRunner.removeContainer(containerConfig.name);
       }
       
       return {
-        success: result.success,
-        output: result.output,
-        error: result.error,
-        exitCode: result.statusCode || 0
+        success: false,
+        output: '',
+        error: errorMessage,
+        exitCode: 1
       };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      if (command.allow_failure) {
-        this.outputChannel.appendLine(`Command failed but continuing (allow_failure: true)`);
-        vscode.window.showWarningMessage(`Docker command failed but continuing: ${command.name}`);
-        
-        return {
-          success: true, // Mark as successful since failure is allowed
-          output: '',
-          error: errorMessage,
-          exitCode: 0
-        };
-      } else {
-        vscode.window.showErrorMessage(`Docker command failed: ${command.name}`);
-        
-        return {
-          success: false,
-          output: '',
-          error: errorMessage,
-          exitCode: 1
-        };
-      }
     }
   }
 
