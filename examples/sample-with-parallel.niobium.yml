@@ -1,0 +1,72 @@
+# Blue Wasp configuration file with parallel execution example
+
+# Individual commands - can be run directly or referenced in stages
+commands:
+  - name: Long Task 1
+    description: Simulated long running task 1
+    command: sleep 5 && echo "Task 1 completed after 5 seconds"
+  
+  - name: Long Task 2
+    description: Simulated long running task 2
+    command: sleep 6 && echo "Task 2 completed after 6 seconds"
+  
+  - name: Long Task 3
+    description: Simulated long running task 3
+    command: sleep 4 && echo "Task 3 completed after 4 seconds"
+  
+  - name: Quick Task 1
+    description: Quick task 1
+    command: echo "Quick task 1 completed"
+  
+  - name: Quick Task 2
+    description: Quick task 2
+    command: echo "Quick task 2 completed"
+  
+  - name: Task With Dependency
+    description: Task that has a dependency
+    command: echo "Running after Task 1 and 2"
+    depends_on:
+      - Long Task 1
+      - Long Task 2
+
+# Stages with parallel execution
+stages:
+  - name: Sequential Stage
+    description: Run tasks sequentially (default behavior)
+    commands:
+      - Long Task 1
+      - Long Task 2
+      - Long Task 3
+  
+  - name: Parallel Stage
+    description: Run all tasks in parallel
+    parallel: true
+    commands:
+      - Long Task 1
+      - Long Task 2
+      - Long Task 3
+  
+  - name: Mixed Dependency Stage
+    description: Run tasks in parallel with dependencies
+    parallel: true
+    commands:
+      - Long Task 1
+      - Long Task 2
+      - Task With Dependency
+      - Quick Task 1
+      - Quick Task 2
+
+# Sequences to demonstrate different execution modes
+sequences:
+  - name: Compare Execution
+    description: Compare sequential vs parallel execution
+    stages:
+      - Sequential Stage
+      - Parallel Stage
+  
+  - name: Mixed Execution
+    description: Run with mixed execution modes
+    stages:
+      - Sequential Stage
+      - Parallel Stage
+      - Mixed Dependency Stage 

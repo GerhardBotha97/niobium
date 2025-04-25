@@ -32,6 +32,7 @@ export interface StageConfig {
   description?: string;
   commands: string[] | CommandConfig[];
   allow_failure?: boolean;
+  parallel?: boolean;
 }
 
 export interface SequenceConfig {

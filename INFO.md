@@ -444,34 +444,44 @@ commands:
 
 ```yaml
 commands:
-  - name: Clean Artifacts
-    description: Clean build artifacts (allowed to fail)
-    command: rm -rf ./dist
+  - name: Success Command
+    description: A command that succeeds
+    command: echo "This command works"
+  
+  - name: Failing Command
+    description: A command that fails
+    command: command-not-found
+  
+  - name: Allowed Failure Command
+    description: A command allowed to fail
+    command: command-not-found
     allow_failure: true
   
-  - name: Run Linter
-    description: Run linter (must succeed)
-    command: npm run lint
-  
-  - name: Run Tests
-    description: Run tests (must succeed)
-    command: npm test
-
 stages:
-  - name: Validation Stage
-    description: Run validation checks
+  # This stage will fail on the second command
+  - name: Normal Stage
+    description: This stage will stop on failure
     commands:
-      - Run Linter
-      - Run Tests
+      - Success Command
+      - Failing Command  # This will fail and stop the stage
+      - Echo Environment # This won't run
   
-  - name: Optional Stage
-    description: Run optional tasks (entire stage can fail)
+  # This stage allows individual command failures
+  - name: Mixed Failures Stage
+    description: This stage handles individual command failures
+    commands:
+      - Success Command
+      - Allowed Failure Command  # This will fail but continue
+      - Echo Environment # This will still run
+  
+  # This entire stage is allowed to fail
+  - name: Allow Failure Stage
+    description: This entire stage is allowed to fail
     allow_failure: true
     commands:
-      - Clean Artifacts
-      - name: Generate Docs
-        command: npm run docs
-        # Inherits allow_failure: true from the stage
+      - Success Command
+      - Failing Command  # This will fail but the stage will report success
+      - Echo Environment # This won't run, but the stage will still be considered successful
 ```
 
 ### Docker Command Examples
@@ -743,4 +753,39 @@ The extension captures and displays:
 This extension provides the following settings:
 
 - `bluewasp-runner.configFile`: The name of the configuration file (default: `.bluewasp.yml`)
-- `bluewasp-runner.showOutputOnRun`: Whether to automatically show the output panel when running (default: true) 
+- `bluewasp-runner.showOutputOnRun`: Whether to automatically show the output panel when running (default: true)
+
+### Parallel Execution Example
+
+```yaml
+stages:
+  # Default sequential execution
+  - name: Sequential Stage
+    description: Run commands one after another
+    commands:
+      - First Command
+      - Second Command
+      - Third Command
+  
+  # Parallel execution
+  - name: Parallel Stage
+    description: Run all commands simultaneously
+    parallel: true
+    commands:
+      - First Command
+      - Second Command
+      - Third Command
+  
+  # Parallel with dependencies
+  - name: Mixed Stage
+    description: Run in parallel with dependencies respected
+    parallel: true
+    commands:
+      - First Command
+      - Second Command
+      - name: Dependent Command
+        command: echo "Running after dependencies"
+        depends_on:
+          - First Command
+          - Second Command
+``` 

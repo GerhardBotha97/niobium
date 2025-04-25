@@ -624,6 +624,9 @@ export class CommandRunner {
     if (stage.allow_failure) {
       this.outputChannel.appendLine(`Note: This stage is allowed to fail (allow_failure: true)`);
     }
+    if (stage.parallel) {
+      this.outputChannel.appendLine(`Note: Commands will run in parallel (parallel: true)`);
+    }
     this.outputChannel.appendLine(`${'='.repeat(80)}`);
     
     vscode.window.showInformationMessage(`Running stage: ${stage.name}`);
@@ -653,60 +656,137 @@ export class CommandRunner {
     const stageStartTime = new Date();
     this.outputChannel.appendLine(`Stage started at: ${stageStartTime.toLocaleTimeString()}`);
     this.outputChannel.appendLine(`Total commands to execute: ${commands.length}`);
+    this.outputChannel.appendLine(`Execution mode: ${stage.parallel ? 'Parallel' : 'Sequential'}`);
     
-    // Execute each command in sequence
-    let commandIndex = 0;
     let stageSuccess = true;
     let combinedOutput = '';
     let executedCommands: string[] = [];
     
-    for (const command of commands) {
-      commandIndex++;
-      this.outputChannel.appendLine(`\n[${commandIndex}/${commands.length}] Executing command: ${command.name}`);
+    if (stage.parallel) {
+      // Execute commands in parallel
+      this.outputChannel.appendLine(`Running all commands in parallel`);
       
-      // Check if command dependencies are satisfied
-      if (!this.areDependenciesSatisfied(command, executedCommands)) {
-        const error = `Cannot run command "${command.name}" because its dependencies have not been executed`;
-        this.outputChannel.appendLine(`\n[ERROR] ${error}`);
+      const runningCommands = commands.map(async (command, index) => {
+        const commandIndex = index + 1;
+        this.outputChannel.appendLine(`\n[${commandIndex}/${commands.length}] Starting command in parallel: ${command.name}`);
         
-        if (!command.allow_failure) {
-          return { 
-            success: false, 
-            output: combinedOutput, 
-            error: error, 
-            exitCode: 1
+        // Check if command dependencies are satisfied
+        if (!this.areDependenciesSatisfied(command, executedCommands)) {
+          const error = `Cannot run command "${command.name}" because its dependencies have not been executed`;
+          this.outputChannel.appendLine(`\n[ERROR] ${error}`);
+          
+          if (!command.allow_failure) {
+            return { 
+              success: false, 
+              output: '', 
+              error, 
+              exitCode: 1,
+              commandName: command.name
+            };
+          }
+          
+          return {
+            success: true,
+            output: `Command skipped due to unsatisfied dependencies: ${command.name}`,
+            commandName: command.name
           };
         }
         
-        continue;
-      }
+        try {
+          const result = await this.runCommand(command, workspaceRoot);
+          
+          // Track executed commands for dependency checking - we need to be careful with race conditions here
+          executedCommands.push(command.name);
+          
+          // If this command had a WebView job, add it as child of the stage
+          if (stageJobId && this.jobOutputService) {
+            // Get the command's job ID from active jobs
+            const commandJob = [...this.jobOutputService['activeJobs'].values()]
+              .find(job => job.type === 'command' && job.name === command.name);
+            
+            if (commandJob) {
+              this.jobOutputService.addChildJob(stageJobId, commandJob.id);
+            }
+          }
+          
+          return {
+            ...result,
+            commandName: command.name
+          };
+        } catch (error) {
+          return {
+            success: false,
+            output: '',
+            error: String(error),
+            commandName: command.name
+          };
+        }
+      });
       
-      const result = await this.runCommand(command, workspaceRoot);
-      combinedOutput += result.output + '\n';
+      // Wait for all commands to complete
+      const results = await Promise.all(runningCommands);
       
-      // Track executed commands for dependency checking
-      executedCommands.push(command.name);
-      
-      // If this command had a WebView job, add it as child of the stage
-      if (stageJobId && this.jobOutputService) {
-        // Get the command's job ID from active jobs
-        const commandJob = [...this.jobOutputService['activeJobs'].values()]
-          .find(job => job.type === 'command' && job.name === command.name);
+      // Process results
+      for (const result of results) {
+        combinedOutput += `\n--- Command: ${result.commandName} ---\n${result.output || ''}\n`;
         
-        if (commandJob) {
-          this.jobOutputService.addChildJob(stageJobId, commandJob.id);
+        if (!result.success && !commands.find(c => c.name === result.commandName)?.allow_failure) {
+          stageSuccess = false;
+          this.outputChannel.appendLine(`\nCommand "${result.commandName}" failed with${result.error ? ': ' + result.error : ' an error'}`);
         }
       }
+    } else {
+      // Original sequential execution logic
+      let commandIndex = 0;
       
-      // If the command failed and doesn't allow failure, stop the stage
-      if (!result.success && !command.allow_failure) {
-        stageSuccess = false;
-        this.outputChannel.appendLine(`Command failed. Stopping stage execution since allow_failure is not set.`);
-        break;
+      for (const command of commands) {
+        commandIndex++;
+        this.outputChannel.appendLine(`\n[${commandIndex}/${commands.length}] Executing command: ${command.name}`);
+        
+        // Check if command dependencies are satisfied
+        if (!this.areDependenciesSatisfied(command, executedCommands)) {
+          const error = `Cannot run command "${command.name}" because its dependencies have not been executed`;
+          this.outputChannel.appendLine(`\n[ERROR] ${error}`);
+          
+          if (!command.allow_failure) {
+            return { 
+              success: false, 
+              output: combinedOutput, 
+              error: error, 
+              exitCode: 1
+            };
+          }
+          
+          continue;
+        }
+        
+        const result = await this.runCommand(command, workspaceRoot);
+        combinedOutput += result.output + '\n';
+        
+        // Track executed commands for dependency checking
+        executedCommands.push(command.name);
+        
+        // If this command had a WebView job, add it as child of the stage
+        if (stageJobId && this.jobOutputService) {
+          // Get the command's job ID from active jobs
+          const commandJob = [...this.jobOutputService['activeJobs'].values()]
+            .find(job => job.type === 'command' && job.name === command.name);
+          
+          if (commandJob) {
+            this.jobOutputService.addChildJob(stageJobId, commandJob.id);
+          }
+        }
+        
+        // If the command failed and doesn't allow failure, stop the stage
+        if (!result.success && !command.allow_failure) {
+          stageSuccess = false;
+          this.outputChannel.appendLine(`Command failed. Stopping stage execution since allow_failure is not set.`);
+          break;
+        }
+        
+        // Add a small delay between commands
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      
-      // Add a small delay between commands
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // Record end time
