@@ -21,6 +21,7 @@ export class DockerRunner {
   private jobOutputService: JobOutputService;
   private runningContainers: Map<string, Dockerode.Container> = new Map();
   private ignoreProvider: IgnoreProvider;
+  private containerLogs: Map<string, string> = new Map(); // Store logs for each container
 
   constructor(context?: vscode.ExtensionContext) {
     this.docker = new Dockerode();
@@ -46,6 +47,25 @@ export class DockerRunner {
     relativePath = relativePath.replace(/\\/g, '/');
     
     return this.ignoreProvider.isIgnored(relativePath);
+  }
+
+  /**
+   * Helper function to clean Docker log output
+   * Removes ANSI color codes and control characters
+   */
+  private cleanDockerOutput(logs: string): string {
+    // First remove standard ANSI escape sequences
+    let cleaned = logs
+      // Remove ANSI color escape sequences
+      .replace(/\u001b\[\d+(;\d+)*m/g, '')
+      // Remove other common ANSI escape sequences
+      .replace(/\u001b\[K/g, '')  // Clear line
+      .replace(/\u001b\[\d+[A-Za-z]/g, '');  // Cursor movement commands
+    
+    // Remove any other control characters (except newlines, tabs, and carriage returns)
+    cleaned = cleaned.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+    
+    return cleaned;
   }
 
   /**
@@ -299,7 +319,13 @@ export class DockerRunner {
           tail: -1  // Use -1 to get all logs
         });
         
-        const logs = logStream.toString();
+        // Clean the logs before displaying or processing
+        const rawLogs = logStream.toString();
+        const logs = this.cleanDockerOutput(rawLogs);
+        
+        // Store the logs for this container
+        this.containerLogs.set(container.name, logs);
+        
         this.outputChannel.appendLine(`\n[OUTPUT]`);
         this.outputChannel.appendLine(logs);
         
@@ -340,7 +366,7 @@ export class DockerRunner {
       
       return {
         success: true,
-        output: `Container ${container.name} started with ID: ${containerId}`,
+        output: this.containerLogs.get(container.name) || `Container ${container.name} started with ID: ${containerId}`,
         containerId
       };
     } catch (error) {

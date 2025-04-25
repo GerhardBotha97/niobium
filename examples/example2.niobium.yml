@@ -27,6 +27,15 @@ commands:
       - source: .
         target: /app
 
+  - name: checkov
+    description: Run Checkov to scan for security issues in Terraform code
+    image: bridgecrew/checkov
+    image_tag: latest
+    command: --directory /terraform --output json --output-file-path /terraform/checkov-results.json
+    volumes:
+      - source: .
+        target: /terraform
+
 stages:
   - name: security
     description: Run all security checks

@@ -138,15 +138,24 @@ export class CommandRunner {
     return true;
   }
 
-  // New method to save command output to a file
-  private async saveOutputToFile(command: CommandConfig, output: string, workspaceRoot: string): Promise<void> {
-    if (!command.output_file) {
+  // Helper function to strip ANSI color codes from string
+  private stripAnsiCodes(text: string): string {
+    // First try with regex for standard ANSI escape sequences
+    const basic = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    
+    // Then strip any non-printable control characters (anything below ASCII 32 except newline and tab)
+    return basic.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+  }
+
+  // New method to save command output to a file with an optional alternative filename
+  private async saveOutputToFile(command: CommandConfig, output: string, workspaceRoot: string, alternativeFilename?: string): Promise<void> {
+    if (!command.output_file && !alternativeFilename) {
       return;
     }
     
     try {
       // Process variables in the output file path
-      const processedOutputFile = this.processVariables(command.output_file);
+      const outputFilename = alternativeFilename || this.processVariables(command.output_file!);
       
       // Create .niobium_results directory if it doesn't exist
       const resultsDir = path.join(workspaceRoot, '.niobium_results');
@@ -155,7 +164,7 @@ export class CommandRunner {
       }
       
       // Construct the full output file path
-      const outputFilePath = path.join(resultsDir, processedOutputFile);
+      const outputFilePath = path.join(resultsDir, outputFilename);
       
       // Create subdirectories if needed
       const outputDirPath = path.dirname(outputFilePath);
@@ -163,7 +172,59 @@ export class CommandRunner {
         fs.mkdirSync(outputDirPath, { recursive: true });
       }
       
-      // Write the output to the file
+      // For JSON files, try to extract and prettify the JSON
+      if (outputFilename.endsWith('.json')) {
+        try {
+          // Find the JSON structure start and end
+          const jsonStart = Math.max(0, output.indexOf('{'));
+          const jsonStartArray = output.indexOf('[');
+          const startPos = (jsonStartArray !== -1 && (jsonStartArray < jsonStart || jsonStart === -1)) 
+            ? jsonStartArray 
+            : jsonStart;
+          
+          if (startPos !== -1) {
+            // Find matching end - count braces/brackets to handle nested structures
+            let endPos = -1;
+            let depth = 0;
+            const startChar = output.charAt(startPos);
+            const endChar = startChar === '{' ? '}' : ']';
+            
+            for (let i = startPos; i < output.length; i++) {
+              const char = output.charAt(i);
+              if ((char === '{' && startChar === '{') || (char === '[' && startChar === '[')) {
+                depth++;
+              } else if ((char === '}' && startChar === '{') || (char === ']' && startChar === '[')) {
+                depth--;
+                if (depth === 0) {
+                  endPos = i + 1;
+                  break;
+                }
+              }
+            }
+            
+            if (endPos !== -1) {
+              // Extract JSON content
+              const jsonContent = output.substring(startPos, endPos);
+              
+              try {
+                // Try to parse and format it
+                const parsedJson = JSON.parse(jsonContent);
+                fs.writeFileSync(outputFilePath, JSON.stringify(parsedJson, null, 2));
+                this.outputChannel.appendLine(`\n[Output] Formatted JSON saved to ${outputFilePath}`);
+                return;
+              } catch (parseError) {
+                // Parsing failed, fall back to direct write
+                this.outputChannel.appendLine(`\n[WARNING] JSON parsing failed: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+              }
+            }
+          }
+        } catch (error) {
+          // Error in JSON extraction, fall back to direct write
+          this.outputChannel.appendLine(`\n[WARNING] JSON extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      
+      // For non-JSON files or if JSON parsing failed, write directly
       fs.writeFileSync(outputFilePath, output);
       
       this.outputChannel.appendLine(`\n[Output] Results saved to ${outputFilePath}`);
@@ -886,8 +947,74 @@ export class CommandRunner {
         this.outputChannel.appendLine(`\n[OUTPUT]`);
         this.outputChannel.appendLine(logs);
         
-        // Save output to file if output_file is specified
-        await this.saveOutputToFile(command, logs, workspaceRoot);
+        // Special handling for Checkov - try to find the output file instead of parsing stdout
+        if (command.image === 'bridgecrew/checkov' && command.output_file && 
+            command.volumes && command.volumes.length > 0) {
+          let checkovOutputFile = '';
+          
+          // Look for output-file-path argument in the command
+          const outputPathMatch = containerConfig.command?.match(/--output-file-path\s+(\S+)/);
+          if (outputPathMatch && outputPathMatch[1]) {
+            checkovOutputFile = outputPathMatch[1];
+            
+            // Find the volume mapping to locate the file on the host
+            for (const volume of command.volumes) {
+              if (checkovOutputFile.startsWith(volume.target)) {
+                // Convert container path to host path
+                const relativePath = checkovOutputFile.substring(volume.target.length);
+                const hostPath = path.join(volume.source, relativePath);
+                const fullHostPath = path.resolve(workspaceRoot, hostPath);
+                
+                this.outputChannel.appendLine(`\n[INFO] Looking for Checkov output file at: ${fullHostPath}`);
+                
+                // Check if the file exists
+                if (fs.existsSync(fullHostPath)) {
+                  try {
+                    // Read the file directly - should be clean JSON
+                    const fileContent = fs.readFileSync(fullHostPath, 'utf8');
+                    
+                    // Save it to our output location
+                    if (command.output_file) {
+                      const resultsDir = path.join(workspaceRoot, '.niobium_results');
+                      if (!fs.existsSync(resultsDir)) {
+                        fs.mkdirSync(resultsDir, { recursive: true });
+                      }
+                      
+                      const outputFilePath = path.join(resultsDir, command.output_file);
+                      const outputDirPath = path.dirname(outputFilePath);
+                      if (!fs.existsSync(outputDirPath)) {
+                        fs.mkdirSync(outputDirPath, { recursive: true });
+                      }
+                      
+                      // Copy the file directly
+                      fs.copyFileSync(fullHostPath, outputFilePath);
+                      this.outputChannel.appendLine(`\n[Output] Results copied from Checkov output file to ${outputFilePath}`);
+                      
+                      // Also save the logs for reference
+                      await this.saveOutputToFile(command, logs, workspaceRoot, 'checkov-logs.txt');
+                    }
+                  } catch (fileError) {
+                    this.outputChannel.appendLine(`\n[ERROR] Failed to process Checkov output file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+                    // Fall back to regular output handling
+                    await this.saveOutputToFile(command, logs, workspaceRoot);
+                  }
+                } else {
+                  this.outputChannel.appendLine(`\n[WARNING] Checkov output file not found at: ${fullHostPath}`);
+                  // Fall back to regular output handling
+                  await this.saveOutputToFile(command, logs, workspaceRoot);
+                }
+                
+                break;
+              }
+            }
+          } else {
+            // No output file path found in command, use regular output handling
+            await this.saveOutputToFile(command, logs, workspaceRoot);
+          }
+        } else {
+          // Regular output handling for non-Checkov commands
+          await this.saveOutputToFile(command, logs, workspaceRoot);
+        }
         
         if (jobId) {
           this.jobOutputService.appendOutput(jobId, logs);
