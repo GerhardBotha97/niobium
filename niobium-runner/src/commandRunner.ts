@@ -8,8 +8,6 @@ import { JobOutputService } from './ui/jobOutputService';
 import { DockerRunner } from './dockerRunner';
 import { IgnoreProvider } from './utils/ignoreUtils';
 import { sanitizeContainerName } from './utils/dockerUtils';
-import * as net from 'net';
-import * as os from 'os';
 
 const execAsync = promisify(cp.exec);
 

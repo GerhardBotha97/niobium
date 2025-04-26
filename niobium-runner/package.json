@@ -28,6 +28,7 @@
     "onCommand:niobium-runner.runSpecificSequence",
     "onCommand:niobium-runner.refreshViews",
     "onCommand:niobium-runner.startContainer",
+    "onCommand:niobium-runner.showKeyboardShortcuts",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container"
@@ -207,6 +208,11 @@
         "command": "niobium-runner.startContainer",
         "title": "Niobium: Start Container",
         "icon": "$(play)"
+      },
+      {
+        "command": "niobium-runner.showKeyboardShortcuts",
+        "title": "Niobium: Show Keyboard Shortcuts",
+        "icon": "$(keyboard)"
       }
     ],
     "iconThemes": [
@@ -252,7 +258,57 @@
           "description": "Log level for Niobium Runner"
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "niobium-runner.run",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.runStage",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.runSequence",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.showOutput",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.showDashboard",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.runContainer",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "niobium-runner.refreshViews",
+        "key": "ctrl+shift+f5",
+        "mac": "cmd+shift+f5",
+        "when": "viewFocus && view =~ /niobium-/"
+      },
+      {
+        "command": "niobium-runner.showKeyboardShortcuts",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

@@ -9,6 +9,49 @@ import { ContainerViewProvider } from './views/containerView';
 import { IgnoreProvider } from './utils/ignoreUtils';
 import { JobOutputService } from './ui/jobOutputService';
 
+// Function to log keyboard shortcuts information
+function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
+  console.log('Niobium Runner keyboard shortcuts:');
+  console.log('Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)');
+  console.log('Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)');
+  console.log('Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)');
+  console.log('Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)');
+  console.log('Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)');
+  console.log('Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)');
+  console.log('Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS) - when focused on Niobium views');
+  
+  // Check if this is the first activation after adding shortcuts
+  const hasShownShortcuts = context.globalState.get('niobium.hasShownShortcuts', false);
+  
+  if (!hasShownShortcuts) {
+    // Show a notification about the keyboard shortcuts
+    vscode.window.showInformationMessage(
+      'Niobium Runner: Keyboard shortcuts are now available! Open README for details.',
+      'View Shortcuts'
+    ).then(selection => {
+      if (selection === 'View Shortcuts') {
+        // Show a quick pick with the keyboard shortcuts
+        const shortcuts = [
+          'Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)',
+          'Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)',
+          'Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)',
+          'Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)',
+          'Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)',
+          'Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)',
+          'Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS)'
+        ];
+        
+        vscode.window.showQuickPick(shortcuts, {
+          placeHolder: 'Niobium Runner Keyboard Shortcuts'
+        });
+      }
+    });
+    
+    // Mark that we've shown the shortcuts notification
+    context.globalState.update('niobium.hasShownShortcuts', true);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('Blue Wasp Runner is now active!');
 
@@ -19,6 +62,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Initialize the ignore provider
   const ignoreProvider = IgnoreProvider.getInstance();
   ignoreProvider.initialize(context);
+
+  // Log keyboard shortcuts information
+  logKeyboardShortcutsInfo(context);
 
   // Initialize the dashboard panel
   DashboardPanel.initialize(context);
@@ -37,6 +83,27 @@ export function activate(context: vscode.ExtensionContext) {
     'niobium-container',
     containerViewProvider
   );
+
+  // Register command to show keyboard shortcuts
+  const showKeyboardShortcuts = vscode.commands.registerCommand('niobium-runner.showKeyboardShortcuts', () => {
+    // Show a quick pick with the keyboard shortcuts
+    const shortcuts = [
+      'Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)',
+      'Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)',
+      'Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)',
+      'Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)',
+      'Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)',
+      'Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)',
+      'Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS)'
+    ];
+    
+    vscode.window.showQuickPick(shortcuts, {
+      placeHolder: 'Niobium Runner Keyboard Shortcuts'
+    });
+  });
+  
+  // Add the command to the context subscriptions
+  context.subscriptions.push(showKeyboardShortcuts);
 
   // Register refresh commands
   context.subscriptions.push(

@@ -192,6 +192,23 @@ This extension contributes the following settings:
 - `niobium-runner.showNotifications`: Show notifications for command status (default: true)
 - `niobium-runner.dockerPath`: Path to the Docker executable (default: "docker")
 
+## Keyboard Shortcuts
+
+Niobium Runner provides the following keyboard shortcuts for quick access to common features:
+
+| Feature | Windows/Linux | macOS |
+|---------|--------------|-------|
+| Run Command | `Ctrl+Shift+R` | `Cmd+Shift+R` |
+| Run Stage | `Ctrl+Shift+S` | `Cmd+Shift+S` |
+| Run Sequence | `Ctrl+Shift+Q` | `Cmd+Shift+Q` |
+| Show Output | `Ctrl+Shift+O` | `Cmd+Shift+O` |
+| Show Dashboard | `Ctrl+Shift+D` | `Cmd+Shift+D` |
+| Run Docker Container | `Ctrl+Shift+C` | `Cmd+Shift+C` |
+| Refresh Views | `Ctrl+Shift+F5` | `Cmd+Shift+F5` (when focused on Niobium views) |
+| Show Keyboard Shortcuts | `Ctrl+Shift+K` | `Cmd+Shift+K` |
+
+These shortcuts are available when the editor has focus, allowing you to quickly run tasks without navigating menus.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
