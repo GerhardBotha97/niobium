@@ -8,6 +8,8 @@ import { DashboardViewProvider } from './views/dashboardView';
 import { ContainerViewProvider } from './views/containerView';
 import { IgnoreProvider } from './utils/ignoreUtils';
 import { JobOutputService } from './ui/jobOutputService';
+import { FileWatcherService } from './utils/fileWatcherService';
+import { registerFileWatcherView } from './views/fileWatcherView';
 
 // Function to log keyboard shortcuts information
 function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
@@ -83,6 +85,43 @@ export function activate(context: vscode.ExtensionContext) {
     'niobium-container',
     containerViewProvider
   );
+
+  // Initialize file watcher service
+  const fileWatcherService = FileWatcherService.getInstance(context);
+  
+  // Register file watcher view
+  registerFileWatcherView(context);
+  
+  // Register file watcher commands
+  const toggleAllFileWatchers = vscode.commands.registerCommand('niobium-runner.toggleAllFileWatchers', () => {
+    fileWatcherService.toggleAllWatchers();
+  });
+  
+  const manageFileWatchers = vscode.commands.registerCommand('niobium-runner.manageFileWatchers', async () => {
+    const watchers = fileWatcherService.getWatchers();
+    
+    if (watchers.length === 0) {
+      vscode.window.showInformationMessage('No file watchers configured. Add watch patterns to stages in your .niobium.yml file.');
+      return;
+    }
+    
+    const watcherItems = watchers.map(watcher => ({
+      label: watcher.stageName,
+      description: watcher.config.enabled ? 'Enabled' : 'Disabled',
+      detail: watcher.config.stageConfig.description || `${watcher.config.patterns.length} patterns`,
+      stageName: watcher.stageName
+    }));
+    
+    const selectedWatcher = await vscode.window.showQuickPick(watcherItems, {
+      placeHolder: 'Select a file watcher to toggle'
+    });
+    
+    if (selectedWatcher) {
+      fileWatcherService.toggleWatcher(selectedWatcher.stageName);
+    }
+  });
+  
+  context.subscriptions.push(toggleAllFileWatchers, manageFileWatchers);
 
   // Register command to show keyboard shortcuts
   const showKeyboardShortcuts = vscode.commands.registerCommand('niobium-runner.showKeyboardShortcuts', () => {
@@ -825,7 +864,9 @@ export function activate(context: vscode.ExtensionContext) {
     viewContainerLogs,
     removeContainer,
     showDockerOutput,
-    addDockerContainer
+    addDockerContainer,
+    toggleAllFileWatchers,
+    manageFileWatchers
   );
 }
 

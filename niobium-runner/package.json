@@ -29,9 +29,14 @@
     "onCommand:niobium-runner.refreshViews",
     "onCommand:niobium-runner.startContainer",
     "onCommand:niobium-runner.showKeyboardShortcuts",
+    "onCommand:niobium-runner.toggleFileWatcher",
+    "onCommand:niobium-runner.toggleAllFileWatchers",
+    "onCommand:niobium-runner.refreshFileWatchers",
+    "onCommand:niobium-runner.manageFileWatchers",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
-    "onView:niobium-container"
+    "onView:niobium-container",
+    "onView:niobium-file-watchers"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -59,6 +64,13 @@
           "icon": "media/wasp-icon.svg",
           "contextualTitle": "Docker Containers",
           "when": "workbenchState != empty"
+        },
+        {
+          "id": "niobium-file-watchers",
+          "name": "File Watchers",
+          "icon": "media/wasp-icon.svg",
+          "contextualTitle": "File Watchers",
+          "when": "workbenchState != empty"
         }
       ]
     },
@@ -82,6 +94,16 @@
         {
           "command": "niobium-runner.addDockerContainer",
           "when": "view == niobium-container",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.refreshFileWatchers",
+          "when": "view == niobium-file-watchers",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.toggleAllFileWatchers",
+          "when": "view == niobium-file-watchers",
           "group": "navigation"
         }
       ],
@@ -120,6 +142,21 @@
           "command": "niobium-runner.removeContainer",
           "when": "view == niobium-container && viewItem == container",
           "group": "1@2"
+        },
+        {
+          "command": "niobium-runner.toggleFileWatcher",
+          "when": "view == niobium-file-watchers && viewItem == enabledWatcher",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.toggleFileWatcher",
+          "when": "view == niobium-file-watchers && viewItem == disabledWatcher",
+          "group": "inline"
+        },
+        {
+          "command": "niobium-runner.runSpecificStage",
+          "when": "view == niobium-file-watchers && (viewItem == enabledWatcher || viewItem == disabledWatcher)",
+          "group": "1@1"
         }
       ]
     },
@@ -213,6 +250,26 @@
         "command": "niobium-runner.showKeyboardShortcuts",
         "title": "Niobium: Show Keyboard Shortcuts",
         "icon": "$(keyboard)"
+      },
+      {
+        "command": "niobium-runner.refreshFileWatchers",
+        "title": "Niobium: Refresh File Watchers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "niobium-runner.toggleFileWatcher",
+        "title": "Niobium: Toggle File Watcher",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "niobium-runner.toggleAllFileWatchers",
+        "title": "Niobium: Toggle All File Watchers",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "niobium-runner.manageFileWatchers",
+        "title": "Niobium: Manage File Watchers",
+        "icon": "$(settings-gear)"
       }
     ],
     "iconThemes": [
@@ -256,6 +313,21 @@
           ],
           "default": "info",
           "description": "Log level for Niobium Runner"
+        },
+        "niobium-runner.fileWatchers.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable file watchers to automatically run stages when files change"
+        },
+        "niobium-runner.fileWatchers.defaultDebounce": {
+          "type": "number",
+          "default": 500,
+          "description": "Default debounce time in milliseconds for file watchers"
+        },
+        "niobium-runner.fileWatchers.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications when a file watcher triggers a stage run"
         }
       }
     },
@@ -341,7 +413,8 @@
   "dependencies": {
     "@types/js-yaml": "^4.0.9",
     "dockerode": "^3.3.5",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "minimatch": "^6.2.0"
   },
   "publisher": "niobiumrunner",
   "repository": {

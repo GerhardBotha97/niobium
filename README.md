@@ -182,6 +182,33 @@ commands:
     command: npm start
 ```
 
+### File Watchers
+
+You can set up file watchers to automatically run stages when files change:
+
+```yaml
+stages:
+  build:
+    description: Build the application
+    commands:
+      - transpile
+      - bundle
+    watch:
+      patterns:
+        - "src/**/*.ts"
+        - "src/**/*.tsx"
+        - "!src/**/*.test.ts"  # Exclude test files with ! prefix
+      debounce: 500  # Milliseconds to wait before triggering
+```
+
+File watchers support:
+- Multiple glob patterns to match files
+- Exclusion patterns (prefix with !)
+- Configurable debounce time
+- Enable/disable from the VS Code UI
+
+The file watcher status is displayed in the status bar, and you can manage watchers from the File Watchers view in the Niobium sidebar.
+
 ## Extension Settings
 
 This extension contributes the following settings:
@@ -191,6 +218,9 @@ This extension contributes the following settings:
 - `niobium-runner.timeout`: Default timeout for commands in seconds (default: 30)
 - `niobium-runner.showNotifications`: Show notifications for command status (default: true)
 - `niobium-runner.dockerPath`: Path to the Docker executable (default: "docker")
+- `niobium-runner.fileWatchers.enabled`: Enable file watchers to automatically run stages when files change (default: true)
+- `niobium-runner.fileWatchers.defaultDebounce`: Default debounce time in milliseconds for file watchers (default: 500)
+- `niobium-runner.fileWatchers.showNotifications`: Show notifications when a file watcher triggers a stage run (default: true)
 
 ## Keyboard Shortcuts
 

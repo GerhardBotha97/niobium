@@ -992,16 +992,27 @@ export class CommandRunner {
       tag: command.image_tag,
       command: command.command,
       ports: command.ports,
-      volumes: [
-        // Add existing volumes
-        ...(command.volumes || []),
-        // Add dedicated output volume
-        {
-          source: resultsDir,
-          target: outputVolumePath,
-          readonly: false
+      volumes: (() => {
+        // Check if there's already a volume with target '/output'
+        const existingVolumes = command.volumes || [];
+        const hasOutputVolume = existingVolumes.some(vol => vol.target === outputVolumePath);
+        
+        if (hasOutputVolume) {
+          // If an output volume already exists, don't add another one
+          this.outputChannel.appendLine(`[INFO] Using existing volume mapping for ${outputVolumePath}`);
+          return existingVolumes;
+        } else {
+          // Otherwise, add our dedicated output volume
+          return [
+            ...existingVolumes,
+            {
+              source: resultsDir,
+              target: outputVolumePath,
+              readonly: false
+            }
+          ];
         }
-      ],
+      })(),
       workdir: command.workdir,
       network: command.network,
       entrypoint: command.entrypoint,
