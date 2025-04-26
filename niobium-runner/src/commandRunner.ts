@@ -163,17 +163,14 @@ export class CommandRunner {
         fs.mkdirSync(resultsDir, { recursive: true });
       }
       
-      // Construct the full output file path
-      const outputFilePath = path.join(resultsDir, outputFilename);
-      
-      // Create subdirectories if needed
-      const outputDirPath = path.dirname(outputFilePath);
-      if (!fs.existsSync(outputDirPath)) {
-        fs.mkdirSync(outputDirPath, { recursive: true });
-      }
+      // Construct the full output file path - normalize to handle trailing periods
+      const sanitizedOutputFilename = outputFilename.replace(/\.+$/, ''); // Remove any trailing periods
+      // Just use the basename instead of full path to avoid creating subdirectories
+      const baseFilename = path.basename(sanitizedOutputFilename);
+      const outputFilePath = path.join(resultsDir, baseFilename);
       
       // For JSON files, try to extract and prettify the JSON
-      if (outputFilename.endsWith('.json')) {
+      if (baseFilename.endsWith('.json')) {
         try {
           // Find the JSON structure start and end
           const jsonStart = Math.max(0, output.indexOf('{'));
@@ -965,19 +962,58 @@ export class CommandRunner {
     }
     this.outputChannel.appendLine(`Image: ${command.image}${command.image_tag ? `:${command.image_tag}` : ''}`);
     
+    // Create .niobium_results directory if it doesn't exist
+    const resultsDir = path.join(workspaceRoot, '.niobium_results');
+    if (!fs.existsSync(resultsDir)) {
+      fs.mkdirSync(resultsDir, { recursive: true });
+    }
+    
+    // Add a dedicated volume for output files
+    const containerName = command.container_name || `niobium-${sanitizeContainerName(command.name)}-${Date.now()}`;
+    const outputVolumePath = '/output';
+    
+    // Process variables in the output_file path if specified
+    let processedOutputFile = '';
+    if (command.output_file) {
+      processedOutputFile = this.processVariables(command.output_file);
+      
+      // Create subdirectories if needed
+      if (processedOutputFile.includes('/')) {
+        const outputDir = path.join(resultsDir, path.dirname(processedOutputFile));
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+      }
+    }
+    
     // Create a Docker container config from the command
     const containerConfig: DockerContainerConfig = {
-      name: command.container_name || `niobium-${sanitizeContainerName(command.name)}-${Date.now()}`,
+      name: containerName,
       description: command.description,
       image: command.image!, // Using non-null assertion as we've validated this exists
       tag: command.image_tag,
       command: command.command,
       ports: command.ports,
-      volumes: command.volumes,
+      volumes: [
+        // Add existing volumes
+        ...(command.volumes || []),
+        // Add dedicated output volume
+        {
+          source: resultsDir,
+          target: outputVolumePath,
+          readonly: false
+        }
+      ],
       workdir: command.workdir,
       network: command.network,
       entrypoint: command.entrypoint,
-      environment: command.env,
+      environment: {
+        // Add existing environment variables
+        ...(command.env || {}),
+        // Add environment variables for output paths
+        NIOBIUM_OUTPUT_PATH: outputVolumePath,
+        NIOBIUM_OUTPUT_FILE: processedOutputFile || ''
+      },
       remove_when_stopped: command.remove_after_run
     };
 
@@ -1015,7 +1051,7 @@ export class CommandRunner {
         // Wait for the container to exit without a timeout
         await container.wait();
         
-        // Get the logs immediately after the container has exited
+        // Get the logs
         const logStream = await container.logs({
           follow: false,
           stdout: true,
@@ -1023,77 +1059,34 @@ export class CommandRunner {
           tail: -1  // Use -1 to get all logs
         });
         
-        const logs = logStream.toString();
+        // Get raw logs and sanitize them for output display only
+        const logs = this.sanitizeDockerOutput(logStream.toString());
         this.outputChannel.appendLine(`\n[OUTPUT]`);
         this.outputChannel.appendLine(logs);
         
-        // Special handling for Checkov - try to find the output file instead of parsing stdout
-        if (command.image === 'bridgecrew/checkov' && command.output_file && 
-            command.volumes && command.volumes.length > 0) {
-          let checkovOutputFile = '';
+        // Check for output files in the volume directory (which is mapped to .niobium_results)
+        const outputFiles: string[] = [];
+        this.listFilesRecursively(resultsDir, outputFiles);
+        
+        // If we have output files, log them
+        if (outputFiles.length > 0) {
+          this.outputChannel.appendLine(`\n[FILES] Output files in .niobium_results directory:`);
+          outputFiles.forEach(file => {
+            this.outputChannel.appendLine(`- ${file}`);
+          });
+        } else if (command.output_file) {
+          // If no files were found but an output file was specified, try to create it from logs
+          // Keep original path structure but ensure the directory exists
+          const outputPath = path.join(resultsDir, processedOutputFile);
+          const outputDir = path.dirname(outputPath);
           
-          // Look for output-file-path argument in the command
-          const outputPathMatch = containerConfig.command?.match(/--output-file-path\s+(\S+)/);
-          if (outputPathMatch && outputPathMatch[1]) {
-            checkovOutputFile = outputPathMatch[1];
-            
-            // Find the volume mapping to locate the file on the host
-            for (const volume of command.volumes) {
-              if (checkovOutputFile.startsWith(volume.target)) {
-                // Convert container path to host path
-                const relativePath = checkovOutputFile.substring(volume.target.length);
-                const hostPath = path.join(volume.source, relativePath);
-                const fullHostPath = path.resolve(workspaceRoot, hostPath);
-                
-                this.outputChannel.appendLine(`\n[INFO] Looking for Checkov output file at: ${fullHostPath}`);
-                
-                // Check if the file exists
-                if (fs.existsSync(fullHostPath)) {
-                  try {
-                    // Read the file directly - should be clean JSON
-                    const fileContent = fs.readFileSync(fullHostPath, 'utf8');
-                    
-                    // Save it to our output location
-                    if (command.output_file) {
-                      const resultsDir = path.join(workspaceRoot, '.niobium_results');
-                      if (!fs.existsSync(resultsDir)) {
-                        fs.mkdirSync(resultsDir, { recursive: true });
-                      }
-                      
-                      const outputFilePath = path.join(resultsDir, command.output_file);
-                      const outputDirPath = path.dirname(outputFilePath);
-                      if (!fs.existsSync(outputDirPath)) {
-                        fs.mkdirSync(outputDirPath, { recursive: true });
-                      }
-                      
-                      // Copy the file directly
-                      fs.copyFileSync(fullHostPath, outputFilePath);
-                      this.outputChannel.appendLine(`\n[Output] Results copied from Checkov output file to ${outputFilePath}`);
-                      
-                      // Also save the logs for reference
-                      await this.saveOutputToFile(command, logs, workspaceRoot, 'checkov-logs.txt');
-                    }
-                  } catch (fileError) {
-                    this.outputChannel.appendLine(`\n[ERROR] Failed to process Checkov output file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
-                    // Fall back to regular output handling
-                    await this.saveOutputToFile(command, logs, workspaceRoot);
-                  }
-                } else {
-                  this.outputChannel.appendLine(`\n[WARNING] Checkov output file not found at: ${fullHostPath}`);
-                  // Fall back to regular output handling
-                  await this.saveOutputToFile(command, logs, workspaceRoot);
-                }
-                
-                break;
-              }
-            }
-          } else {
-            // No output file path found in command, use regular output handling
-            await this.saveOutputToFile(command, logs, workspaceRoot);
+          if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
           }
-        } else {
-          // Regular output handling for non-Checkov commands
-          await this.saveOutputToFile(command, logs, workspaceRoot);
+          
+          // Simply save the raw logs to the file
+          fs.writeFileSync(outputPath, logs);
+          this.outputChannel.appendLine(`\n[INFO] Container did not create output files. Saving logs to: ${outputPath}`);
         }
         
         if (jobId) {
@@ -1129,7 +1122,29 @@ export class CommandRunner {
       };
     }
   }
-
+  
+  /**
+   * Sanitizes docker output to remove control characters and normalize line endings
+   */
+  private sanitizeDockerOutput(output: string): string {
+    if (!output) {
+      return '';
+    }
+    
+    // Thorough cleaning of Docker output
+    const sanitized = output
+      // Remove ANSI color codes and escape sequences
+      .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+      // Remove common non-printable ASCII and Unicode control characters
+      .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F-\x9F\u0080-\u00A0]/g, '')
+      // Clean up any broken UTF-8 sequences that might appear as replacement characters
+      .replace(/\uFFFD/g, '')
+      // Normalize line endings
+      .replace(/\r\n/g, '\n');
+    
+    return sanitized;
+  }
+  
   /**
    * Kill a process, its children, and processes using the same ports
    */
@@ -1543,5 +1558,24 @@ export class CommandRunner {
     }
     
     return childPids;
+  }
+
+  /**
+   * Helper method to list files recursively in a directory
+   */
+  private listFilesRecursively(dir: string, fileList: string[], baseDir?: string): void {
+    const currentBaseDir = baseDir || dir;
+    const files = fs.readdirSync(dir);
+    
+    files.forEach(file => {
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isDirectory()) {
+        this.listFilesRecursively(filePath, fileList, currentBaseDir);
+      } else {
+        // Get path relative to base directory
+        const relPath = path.relative(currentBaseDir, filePath);
+        fileList.push(relPath);
+      }
+    });
   }
 } 
