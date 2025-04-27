@@ -235,7 +235,7 @@ export class CommandRunner {
     }
 
     // Otherwise, run it as a regular command
-    // Show output channel
+    // Show output channel so users can see scan output
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Command] Running: ${command.name}`);
     if (command.description) {
@@ -271,7 +271,6 @@ export class CommandRunner {
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
       jobId = this.jobOutputService.startCommand(command);
     }
 
@@ -599,7 +598,7 @@ export class CommandRunner {
   }
 
   async runStage(config: NiobiumConfig, stageName: string, workspaceRoot: string): Promise<ExecutionResult> {
-    // Show output channel
+    // Show output channel so users can see scan output
     this.outputChannel.show(true);
     
     const stage = this.configProvider.findStage(config, stageName);
@@ -628,7 +627,6 @@ export class CommandRunner {
     // Create stage job in WebView if JobOutputService is available
     let stageJobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
       stageJobId = this.jobOutputService.startStage(stage);
     }
     
@@ -893,7 +891,7 @@ export class CommandRunner {
   }
 
   async runSequence(config: NiobiumConfig, sequenceName: string, workspaceRoot: string): Promise<ExecutionResult> {
-    // Show output channel
+    // Show output channel so users can see scan output
     this.outputChannel.show(true);
     
     const sequence = this.configProvider.findSequence(config, sequenceName);
@@ -916,7 +914,6 @@ export class CommandRunner {
     // Create sequence job in WebView if JobOutputService is available
     let sequenceJobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
       sequenceJobId = this.jobOutputService.startSequence(sequence.name, sequence.description);
     }
     
@@ -1006,9 +1003,9 @@ export class CommandRunner {
   showOutput(): void {
     this.outputChannel.show(true);
     
-    // Also show the WebView panel if it exists
+    // Always force show the WebView panel when explicitly requested
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
+      this.jobOutputService.showPanel(true); // Force the panel to be shown
     }
   }
 
@@ -1016,8 +1013,7 @@ export class CommandRunner {
    * Run a command as a Docker container
    */
   private async runDockerCommand(command: CommandConfig, workspaceRoot: string): Promise<ExecutionResult> {
-    // Show output channel
-    this.outputChannel.show(true);
+    // Don't show output channel automatically, let user open it manually if needed
     this.outputChannel.appendLine(`\n[Docker Command] Running: ${command.name}`);
     if (command.description) {
       this.outputChannel.appendLine(`Description: ${command.description}`);
@@ -1097,7 +1093,6 @@ export class CommandRunner {
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
       jobId = this.jobOutputService.startCommand(command);
     }
 

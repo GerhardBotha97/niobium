@@ -559,7 +559,7 @@ export function activate(context: vscode.ExtensionContext) {
   const showRunner = vscode.commands.registerCommand('niobium-runner.showRunner', () => {
     // Get the JobOutputService instance and show the panel
     const jobOutputService = JobOutputService.getInstance(context);
-    jobOutputService.showPanel();
+    jobOutputService.showPanel(true); // Force the panel to be shown
   });
 
   // Register command to run Docker containers
@@ -844,6 +844,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
+  // Register command to toggle auto-show panel setting
+  const toggleAutoShowPanel = vscode.commands.registerCommand('niobium-runner.toggleAutoShowPanel', async () => {
+    const config = vscode.workspace.getConfiguration('niobium-runner');
+    const currentValue = config.get<boolean>('autoShowRunnerPanel', true);
+    
+    // Toggle the setting value
+    await config.update('autoShowRunnerPanel', !currentValue, vscode.ConfigurationTarget.Global);
+    
+    // Show confirmation message
+    const newState = !currentValue ? 'enabled' : 'disabled';
+    vscode.window.showInformationMessage(`Auto-show Runner Panel is now ${newState}`);
+  });
+
   // Register all commands
   context.subscriptions.push(
     statusBarItem,
@@ -866,7 +879,8 @@ export function activate(context: vscode.ExtensionContext) {
     showDockerOutput,
     addDockerContainer,
     toggleAllFileWatchers,
-    manageFileWatchers
+    manageFileWatchers,
+    toggleAutoShowPanel
   );
 }
 

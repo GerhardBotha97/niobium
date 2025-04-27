@@ -36,8 +36,43 @@ export class NiobiumPanel {
     // Set the webview's initial html content
     this._update();
     
+    // Set up event handlers
+    this._setupPanelEventHandlers();
+  }
+  
+  // Create or show panel
+  public static createOrShow(extensionUri: vscode.Uri): NiobiumPanel {
+    const column = vscode.window.activeTextEditor
+      ? vscode.window.activeTextEditor.viewColumn
+      : undefined;
+    
+    // If we already have a panel, show it
+    if (NiobiumPanel.currentPanel) {
+      NiobiumPanel.currentPanel._panel.reveal(column);
+      return NiobiumPanel.currentPanel;
+    }
+    
+    // Otherwise, create a new panel
+    const panel = vscode.window.createWebviewPanel(
+      'niobiumPanel',
+      'Niobium Runner',
+      column || vscode.ViewColumn.One,
+      {
+        // Enable JavaScript in the webview
+        enableScripts: true,
+        
+        // Restrict the webview to only load resources from the extension's directory
+        localResourceRoots: [extensionUri]
+      }
+    );
+    
+    NiobiumPanel.currentPanel = new NiobiumPanel(panel, extensionUri);
+    return NiobiumPanel.currentPanel;
+  }
+  
+  // Set up the panel event handlers
+  private _setupPanelEventHandlers(): void {
     // Listen for when the panel is disposed
-    // This happens when the user closes the panel or when the panel is closed programmatically
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     
     // Update the content based on view changes
@@ -71,36 +106,6 @@ export class NiobiumPanel {
       null,
       this._disposables
     );
-  }
-  
-  // Create or show panel
-  public static createOrShow(extensionUri: vscode.Uri): NiobiumPanel {
-    const column = vscode.window.activeTextEditor
-      ? vscode.window.activeTextEditor.viewColumn
-      : undefined;
-    
-    // If we already have a panel, show it
-    if (NiobiumPanel.currentPanel) {
-      NiobiumPanel.currentPanel._panel.reveal(column);
-      return NiobiumPanel.currentPanel;
-    }
-    
-    // Otherwise, create a new panel
-    const panel = vscode.window.createWebviewPanel(
-      'niobiumPanel',
-      'Niobium Runner',
-      column || vscode.ViewColumn.One,
-      {
-        // Enable JavaScript in the webview
-        enableScripts: true,
-        
-        // Restrict the webview to only load resources from the extension's directory
-        localResourceRoots: [extensionUri]
-      }
-    );
-    
-    NiobiumPanel.currentPanel = new NiobiumPanel(panel, extensionUri);
-    return NiobiumPanel.currentPanel;
   }
   
   // Public method to reveal the panel
@@ -640,6 +645,7 @@ ${jobsHtml.length > 0 ? jobsHtml : '<div class="no-jobs">No jobs to display</div
     `;
   }
 
+  // Handle kill job events
   private _onKillJob(jobId: string): void {
     this._onKillJobEmitter.fire(jobId);
   }

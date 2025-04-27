@@ -33,6 +33,7 @@
     "onCommand:niobium-runner.toggleAllFileWatchers",
     "onCommand:niobium-runner.refreshFileWatchers",
     "onCommand:niobium-runner.manageFileWatchers",
+    "onCommand:niobium-runner.toggleAutoShowPanel",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container",
@@ -270,6 +271,10 @@
         "command": "niobium-runner.manageFileWatchers",
         "title": "Niobium: Manage File Watchers",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "niobium-runner.toggleAutoShowPanel",
+        "title": "Niobium: Toggle Auto-Show Runner Panel"
       }
     ],
     "iconThemes": [
@@ -328,6 +333,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show notifications when a file watcher triggers a stage run"
+        },
+        "niobium-runner.autoShowRunnerPanel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically show the Runner Panel when a command, stage, or sequence is executed"
         }
       }
     },

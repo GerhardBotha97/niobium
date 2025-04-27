@@ -72,7 +72,7 @@ export class DockerRunner {
    * Start a Docker container based on the provided configuration
    */
   async startContainer(container: DockerContainerConfig, workspaceRoot: string): Promise<DockerExecutionResult> {
-    // Show output channel
+    // Show output channel to display Docker operations
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Container] Starting: ${container.name}`);
     if (container.description) {
@@ -97,8 +97,6 @@ export class DockerRunner {
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
-      
       // We need to convert the DockerContainerConfig to CommandConfig format
       // to work with existing JobOutputService
       const containerCommand = `docker run ${container.image}${container.tag ? `:${container.tag}` : ''}${container.command ? ` ${container.command}` : ''}`;
@@ -417,7 +415,7 @@ export class DockerRunner {
    * Stop a running Docker container
    */
   async stopContainer(containerName: string): Promise<DockerExecutionResult> {
-    // Show output channel
+    // Show output channel for Docker operations
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Container] Stopping: ${containerName}`);
     
@@ -427,8 +425,6 @@ export class DockerRunner {
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
-      
       jobId = this.jobOutputService.startCommand({
         name: `Stop ${containerName}`,
         description: `Stop Docker container: ${containerName}`,
@@ -536,7 +532,7 @@ export class DockerRunner {
    * Remove a Docker container
    */
   async removeContainer(containerName: string): Promise<DockerExecutionResult> {
-    // Show output channel
+    // Show output channel for Docker operations
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Container] Removing: ${containerName}`);
     
@@ -546,8 +542,6 @@ export class DockerRunner {
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
-      
       jobId = this.jobOutputService.startCommand({
         name: `Remove ${containerName}`,
         description: `Remove Docker container: ${containerName}`,
@@ -646,15 +640,13 @@ export class DockerRunner {
    * Show logs from a Docker container
    */
   async showContainerLogs(containerName: string): Promise<DockerExecutionResult> {
-    // Show output channel
+    // Show output channel for Docker operations
     this.outputChannel.show(true);
     this.outputChannel.appendLine(`\n[Container] Viewing logs: ${containerName}`);
     
     // Create job in web view if JobOutputService is available
     let jobId: string | undefined;
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
-      
       jobId = this.jobOutputService.startCommand({
         name: `Logs ${containerName}`,
         description: `View Docker container logs: ${containerName}`,
@@ -737,9 +729,9 @@ export class DockerRunner {
   showOutput(): void {
     this.outputChannel.show(true);
     
-    // Also show the WebView panel if it exists
+    // Always force show the WebView panel when explicitly requested
     if (this.jobOutputService) {
-      this.jobOutputService.showPanel();
+      this.jobOutputService.showPanel(true); // Force the panel to be shown
     }
   }
 

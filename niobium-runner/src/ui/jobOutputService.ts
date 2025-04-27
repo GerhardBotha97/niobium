@@ -20,8 +20,20 @@ export class JobOutputService {
     return JobOutputService.instance;
   }
 
-  public showPanel(): void {
+  public showPanel(force: boolean = false): void {
     try {
+      // Check if we should show the panel
+      if (!force) {
+        const config = vscode.workspace.getConfiguration('niobium-runner');
+        const autoShowPanel = config.get<boolean>('autoShowRunnerPanel', true);
+        
+        if (!autoShowPanel) {
+          // Don't create or show the panel when auto-show is disabled
+          return;
+        }
+      }
+      
+      // Create or show the panel (only if force is true or autoShowPanel is true)
       if (!this.panel) {
         this.panel = NiobiumPanel.createOrShow(this.context.extensionUri);
         // Set up kill job event handler
@@ -34,6 +46,12 @@ export class JobOutputService {
       // Reset panel reference if we get an error revealing it
       this.panel = undefined;
     }
+  }
+
+  // Helper method to check if the panel should be automatically shown
+  private shouldShowPanel(): boolean {
+    const config = vscode.workspace.getConfiguration('niobium-runner');
+    return config.get<boolean>('autoShowRunnerPanel', true);
   }
 
   // Start tracking a command execution
@@ -68,6 +86,7 @@ export class JobOutputService {
 
     this.activeJobs.set(id, jobOutput);
     
+    // Only add to panel if it already exists, do not create a new one
     if (this.panel) {
       try {
         this.panel.addJob(jobOutput);
@@ -104,6 +123,7 @@ export class JobOutputService {
     this.activeJobs.set(id, jobOutput);
     this.jobHierarchy.set(id, []);
     
+    // Only add to panel if it already exists, do not create a new one
     if (this.panel) {
       try {
         this.panel.addJob(jobOutput);
@@ -133,6 +153,7 @@ export class JobOutputService {
     this.activeJobs.set(id, jobOutput);
     this.jobHierarchy.set(id, []);
     
+    // Only add to panel if it already exists, do not create a new one
     if (this.panel) {
       try {
         this.panel.addJob(jobOutput);
