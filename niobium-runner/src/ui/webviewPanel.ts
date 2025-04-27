@@ -125,7 +125,28 @@ export class NiobiumPanel {
     const updateJobRecursive = (jobs: JobOutput[]): boolean => {
       for (let i = 0; i < jobs.length; i++) {
         if (jobs[i].id === jobId) {
+          // Check if this is a status change from running to something else
+          const statusChanged = updates.status && jobs[i].status === 'running' && updates.status !== 'running';
+          
+          // Apply updates
           jobs[i] = { ...jobs[i], ...updates };
+          
+          // The JobOutput status update has been applied, now refresh the UI
+          // Always do a full refresh when status changes to ensure stop button is removed
+          this._update();
+          
+          // If this is a status change, do an additional update after a short delay
+          // to ensure UI components like kill buttons are properly updated
+          if (statusChanged) {
+            setTimeout(() => {
+              try {
+                this._update();
+              } catch (error) {
+                console.error('Error in delayed update after status change:', error);
+              }
+            }, 100);
+          }
+          
           return true;
         }
         
@@ -142,13 +163,6 @@ export class NiobiumPanel {
     };
     
     updateJobRecursive(this._jobs);
-    
-    try {
-      this._update();
-    } catch (error) {
-      console.error('Error updating job in webview:', error);
-      // If updating fails, the webview might be disposed
-    }
   }
   
   // Clear all jobs
@@ -215,6 +229,13 @@ export class NiobiumPanel {
       : '';
     const allowFailureTag = job.allowFailure ? '<span class="allow-failure">Allow Failure</span>' : '';
     
+    // Create a display name that removes the "niobium-" prefix only for Docker jobs
+    // We identify Docker jobs as command-type jobs with the "niobium-" prefix
+    let displayName = job.name;
+    if (job.type === 'command' && job.name.startsWith('niobium-')) {
+      displayName = job.name.substring('niobium-'.length);
+    }
+    
     // Add kill button only for running jobs - make sure job.status is accurately checked
     const isRunning = job.status === 'running';
     const killButton = isRunning
@@ -231,7 +252,7 @@ export class NiobiumPanel {
         <div class="job-header" onclick="toggleJob('${job.id}')">
           <span class="status-icon">${statusIcon}</span>
           <span class="job-type">${job.type.toUpperCase()}</span>
-          <span class="job-name">${job.name}</span>
+          <span class="job-name">${displayName}</span>
           ${allowFailureTag}
           <span class="job-time">${executionTime}</span>
           ${pidInfo}
@@ -302,6 +323,11 @@ export class NiobiumPanel {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+  
+  // Public method to trigger a full refresh of the webview content
+  public refresh(): void {
+    this._update();
   }
   
   // Update the webview content
@@ -447,24 +473,21 @@ export class NiobiumPanel {
             display: flex;
             justify-content: space-between;
             background-color: var(--vscode-editor-lineHighlightBackground);
-            padding: 5px 8px;
+            padding: 4px 8px;
             cursor: pointer;
-            font-size: 0.9em;
-            font-weight: bold;
             border-radius: 3px 3px 0 0;
           }
           
           .output-content, .error-content {
             margin: 0;
             padding: 8px;
-            overflow-x: auto;
             background-color: var(--vscode-terminal-background);
-            border-radius: 0 0 3px 3px;
-            max-height: 300px;
-            overflow-y: auto;
-            white-space: pre-wrap;
+            color: var(--vscode-terminal-foreground);
             font-family: var(--vscode-editor-font-family);
             font-size: var(--vscode-editor-font-size);
+            white-space: pre-wrap;
+            overflow-x: auto;
+            border-radius: 0 0 3px 3px;
           }
           
           .error-content {
@@ -474,10 +497,54 @@ export class NiobiumPanel {
           .children-jobs {
             margin-left: 20px;
             margin-top: 10px;
-            border-left: 2px solid var(--vscode-panel-border);
+            border-left: 1px dashed var(--vscode-panel-border);
             padding-left: 10px;
           }
           
+          .allow-failure {
+            font-size: 0.7em;
+            background-color: var(--vscode-statusBarItem-warningBackground);
+            color: var(--vscode-statusBarItem-warningForeground);
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-right: 8px;
+          }
+          
+          .container {
+            padding: 10px;
+          }
+          
+          .jobs-container {
+            margin-top: 10px;
+          }
+          
+          .no-jobs {
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+          }
+          
+          .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+          }
+          
+          button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+          }
+          
+          button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+          }
+          
+          /* Status styling */
           .status-running .job-header {
             border-left: 4px solid #3794ff;
           }
@@ -491,60 +558,7 @@ export class NiobiumPanel {
           }
           
           .status-skipped .job-header {
-            border-left: 4px solid #c586c0;
-          }
-          
-          .allow-failure {
-            background-color: #c586c0;
-            color: white;
-            font-size: 0.7em;
-            padding: 2px 6px;
-            border-radius: 3px;
-            margin-right: 8px;
-          }
-          
-          .hidden {
-            display: none;
-          }
-          
-          /* Job type specific styles */
-          .job-sequence > .job-header {
-            background-color: rgba(55, 148, 255, 0.1);
-          }
-          
-          .job-stage > .job-header {
-            background-color: rgba(120, 170, 255, 0.1);
-          }
-        </style>
-        <style>
-          .container {
-            padding: 10px;
-          }
-          
-          .actions-toolbar {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 15px;
-          }
-          
-          .action-button {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 6px 12px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.9em;
-          }
-          
-          .action-button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-          }
-          
-          .no-jobs {
-            padding: 20px;
-            text-align: center;
-            color: var(--vscode-descriptionForeground);
+            border-left: 4px solid #cca700;
           }
         </style>
       </head>
@@ -554,7 +568,7 @@ export class NiobiumPanel {
             <button class="action-button" onclick="clearJobs()">Clear Jobs</button>
           </div>
           <div class="jobs-container">
-            ${jobsHtml.length > 0 ? jobsHtml : '<div class="no-jobs">No jobs to display</div>'}
+${jobsHtml.length > 0 ? jobsHtml : '<div class="no-jobs">No jobs to display</div>'}
           </div>
         </div>
         

@@ -319,7 +319,30 @@ export class FileWatcherService {
             const config = await this.configProvider.loadConfig(this.workspaceRoot);
             if (config) {
               console.log(`Starting stage ${stage.name}`);
-              this.commandRunner.runStage(config, stage.name, this.workspaceRoot);
+              const result = await this.commandRunner.runStage(config, stage.name, this.workspaceRoot);
+              
+              // Refresh dashboard after stage completes
+              try {
+                const { DashboardPanel } = require('../ui/dashboardPanel');
+                // Add an activity entry to show the completion
+                if (result && result.success) {
+                  DashboardPanel.addActivity({
+                    type: 'success',
+                    text: `Stage "${stage.name}" completed successfully`,
+                    time: new Date()
+                  });
+                } else {
+                  DashboardPanel.addActivity({
+                    type: 'error',
+                    text: `Stage "${stage.name}" failed: ${result?.error || 'Unknown error'}`,
+                    time: new Date()
+                  });
+                }
+                // Force refresh the dashboard panel
+                DashboardPanel.refresh();
+              } catch (error) {
+                console.error('Error refreshing dashboard after stage completion:', error);
+              }
             } else {
               console.error(`Could not load config to run stage ${stage.name}`);
             }

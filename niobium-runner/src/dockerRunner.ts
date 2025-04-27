@@ -232,7 +232,9 @@ export class DockerRunner {
             Name: container.restart_policy,
             MaximumRetryCount: container.restart_policy === 'on-failure' ? 3 : undefined
           } : undefined,
-          NetworkMode: container.network
+          NetworkMode: container.network,
+          // Add PID mode to get host's PID namespace
+          PidMode: 'host' 
         },
         ExposedPorts: Object.keys(exposedPorts).length > 0 ? exposedPorts : undefined,
         Volumes: Object.keys(volumes).length > 0 ? volumes : undefined,
@@ -363,6 +365,20 @@ export class DockerRunner {
           this.outputChannel.appendLine(`\n[WARNING] Failed to cleanup container: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
         }
       }
+      
+      // Get the container info including PID
+      const containerInfo = await containerInstance.inspect();
+      const containerPid = containerInfo.State?.Pid;
+      
+      // Register the PID with job output service if available
+      if (containerPid && containerPid > 0 && jobId && this.jobOutputService) {
+        this.jobOutputService.registerPid(jobId, containerPid);
+        this.outputChannel.appendLine(`[INFO] Container PID: ${containerPid}`);
+        this.outputChannel.appendLine(`[INFO] Registered PID ${containerPid} for job ${jobId}`);
+      }
+      
+      const successMessage = `Container ${container.name} started successfully`;
+      this.outputChannel.appendLine(`[SUCCESS] ${successMessage}`);
       
       return {
         success: true,

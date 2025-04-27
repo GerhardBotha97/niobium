@@ -333,7 +333,7 @@ export class DashboardPanel {
         return;
       }
       
-      this._panel.title = 'Blue Wasp Dashboard';
+      this._panel.title = 'Niobium Dashboard';
       this._panel.webview.html = this._getHtmlForWebview();
     } catch (error) {
       console.error('Error updating dashboard webview:', error);
@@ -376,7 +376,7 @@ export class DashboardPanel {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Blue Wasp Dashboard</title>
+        <title>Niobium Dashboard</title>
         <style>
           body {
             font-family: var(--vscode-font-family);
@@ -606,7 +606,7 @@ export class DashboardPanel {
               </svg>
             </div>
             <div>
-              <div class="title">Blue Wasp Dashboard</div>
+              <div class="title">Niobium Dashboard</div>
               <div class="subtitle">Run tasks, view activities, and manage Docker containers</div>
             </div>
           </div>

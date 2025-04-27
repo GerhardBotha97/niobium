@@ -377,13 +377,12 @@ export class CommandRunner {
         
         childProcess = cp.exec(processedCommand, execOptionsWithDetached);
         
-        // Update the job with PID information
-        if (childProcess && childProcess.pid && jobId) {
-          this.outputChannel.appendLine(`\n[INFO] Process started with PID: ${childProcess.pid}`);
-          this.jobOutputService.updateJob(jobId, {
-            pid: childProcess.pid,
-            ports: detectedServerPorts
-          });
+        // Register the process PID with the job output service for tracking
+        if (childProcess.pid && jobId) {
+          console.log(`CommandRunner: Registering PID ${childProcess.pid} for job ${jobId} (${command.name})`);
+          this.jobOutputService.registerPid(jobId, childProcess.pid);
+        } else {
+          console.log(`CommandRunner: Failed to register PID for job ${jobId} - ${childProcess.pid ? 'no jobId' : 'no PID'} (${command.name})`);
         }
         
         // Set up periodic checks to detect child processes and port usage
@@ -801,7 +800,10 @@ export class CommandRunner {
         vscode.window.showWarningMessage(`Stage failed but continuing: ${stage.name}`);
         
         // Mark stage as failed in WebView but indicate it's allowed to fail
-        if (stageJobId) {
+        if (stageJobId && this.jobOutputService) {
+          // Make sure any still-running child jobs are also marked as complete
+          this.cleanupStageJobs(stageJobId);
+          // Then mark the stage as failed
           this.jobOutputService.completeJobFailure(stageJobId);
         }
         
@@ -810,7 +812,10 @@ export class CommandRunner {
         vscode.window.showErrorMessage(`Stage failed: ${stage.name}`);
         
         // Mark stage as failed in WebView
-        if (stageJobId) {
+        if (stageJobId && this.jobOutputService) {
+          // Make sure any still-running child jobs are also marked as complete
+          this.cleanupStageJobs(stageJobId);
+          // Then mark the stage as failed
           this.jobOutputService.completeJobFailure(stageJobId);
         }
         
@@ -820,11 +825,70 @@ export class CommandRunner {
       vscode.window.showInformationMessage(`Stage completed successfully: ${stage.name}`);
       
       // Mark stage as successful in WebView
-      if (stageJobId) {
+      if (stageJobId && this.jobOutputService) {
+        // Make sure any still-running child jobs are also marked as complete
+        this.cleanupStageJobs(stageJobId);
+        // Then mark the stage as successful
         this.jobOutputService.completeJobSuccess(stageJobId);
       }
       
       return { success: true, output: combinedOutput };
+    }
+  }
+
+  /**
+   * Ensure all child jobs of a stage are properly completed
+   * This prevents stale "running" jobs when a stage completes
+   */
+  private cleanupStageJobs(stageJobId: string): void {
+    if (!this.jobOutputService) {
+      return;
+    }
+    
+    console.log(`Cleaning up jobs for stage ${stageJobId}`);
+    
+    // Get the stage job
+    const stageJob = this.jobOutputService.getJob(stageJobId);
+    if (!stageJob || !stageJob.children) {
+      console.log(`No stage job found with ID ${stageJobId} or it has no children`);
+      return;
+    }
+    
+    console.log(`Stage "${stageJob.name}" has ${stageJob.children.length} child jobs`);
+    
+    // Check all child jobs and complete any that are still running
+    for (const childJob of stageJob.children) {
+      if (childJob.status === 'running') {
+        console.log(`Completing child job ${childJob.id} (${childJob.name}) that was still running when stage completed`);
+        this.jobOutputService.appendOutput(childJob.id, '\n[System] Job marked as complete because stage completed');
+        this.jobOutputService.completeJobSuccess(childJob.id);
+      }
+    }
+    
+    // Also search for any jobs with the same names as child jobs that might be orphaned
+    const childJobNames = new Set(stageJob.children.map(job => job.name));
+    
+    // Get all active jobs to look for potential duplicates
+    try {
+      const allActiveJobs = this.jobOutputService['activeJobs'].values();
+      
+      for (const job of allActiveJobs) {
+        if (job.status === 'running' && childJobNames.has(job.name) && 
+            !stageJob.children.some(child => child.id === job.id)) {
+          console.log(`Found potential orphaned job ${job.id} (${job.name}) with same name as stage child - completing it`);
+          this.jobOutputService.appendOutput(job.id, '\n[System] Job marked as complete - matches a job in completed stage');
+          this.jobOutputService.completeJobSuccess(job.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for orphaned jobs:', error);
+    }
+    
+    // Force a refresh of the panel to ensure UI is fully updated
+    try {
+      this.jobOutputService['refreshPanel']();
+    } catch (error) {
+      console.error('Error refreshing panel after cleaning up stage jobs:', error);
     }
   }
 
