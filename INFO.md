@@ -4,6 +4,28 @@
 
 Blue Wasp Runner uses `.bluewasp.yml` files to configure commands, stages, and sequences that can be executed from VS Code. The configuration file should be placed in your project root.
 
+### Including Other Config Files
+
+To keep your main configuration file clean and organized, you can split it into multiple files and include them:
+
+```yaml
+# Main .bluewasp.yml file
+include:
+  - security.bluewasp.yml  # Include from same directory
+  - ./build/npm.bluewasp.yml  # Include from subdirectory
+  - /path/to/absolute/location.bluewasp.yml  # Include using absolute path
+
+# Rest of your configuration...
+```
+
+The include feature supports:
+- Single file inclusion: `include: path/to/file.yml`
+- Multiple file inclusion: `include: [file1.yml, file2.yml]` or using the array syntax shown above
+- Relative and absolute paths
+- Nested includes (included files can also include other files)
+
+See the "Examples" section for more details on using includes.
+
 ## Ignoring Files and Directories
 
 Blue Wasp Runner supports a `.bluewaspignore` file that allows you to specify files and directories that should be excluded from command execution and Docker volume operations. The ignore file uses the same syntax as `.gitignore`.
@@ -53,6 +75,11 @@ variables:
   PROJECT_NAME: myproject
   VERSION: 1.0.0
   BUILD_DIR: ./build
+
+# Include other configuration files
+include:
+  - security.bluewasp.yml
+  - ./build/npm.bluewasp.yml
 
 commands:
   - name: Command Name
@@ -708,6 +735,79 @@ sequences:
       - Build Stage
       - Deploy Stage
 ```
+
+### Config Include Example
+
+Using includes allows you to organize your configuration into logical sections:
+
+```yaml
+# Main .bluewasp.yml
+include:
+  - security.bluewasp.yml
+  - ./build/npm.bluewasp.yml
+
+variables:
+  PROJECT_NAME: myproject
+  VERSION: 1.0.0
+
+commands:
+  - name: run-dev
+    description: "Start the development server"
+    command: npm run dev
+
+stages:
+  - name: validate
+    description: "Validate the project"
+    commands:
+      - security-scan  # From security.bluewasp.yml
+      - lint-code      # From security.bluewasp.yml
+      - npm-test       # From npm.bluewasp.yml
+```
+
+```yaml
+# security.bluewasp.yml
+commands:
+  - name: security-scan
+    description: "Run security scanning"
+    command: echo "Running security scans"
+  
+  - name: lint-code
+    description: "Lint the code"
+    command: echo "Linting code"
+
+stages:
+  - name: security
+    description: "Run all security checks"
+    commands:
+      - security-scan
+      - lint-code
+```
+
+```yaml
+# build/npm.bluewasp.yml
+commands:
+  - name: npm-install
+    description: "Install npm dependencies"
+    command: npm install
+  
+  - name: npm-test
+    description: "Run tests"
+    command: npm test
+    depends_on: npm-install
+
+stages:
+  - name: build
+    description: "Build the npm project"
+    commands:
+      - npm-install
+      - npm-test
+```
+
+This approach allows you to:
+- Keep configuration files smaller and more focused
+- Share common configurations across projects
+- Organize commands by their purpose or technology
+- Build a library of reusable configuration components
 
 ## Usage
 

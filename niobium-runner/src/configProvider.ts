@@ -86,6 +86,8 @@ export interface NiobiumConfig {
   containers?: DockerContainerConfig[];
   // New field for global variables
   variables?: Record<string, string>;
+  // New field for including other config files
+  include?: string | string[];
 }
 
 // Storage for output variables to enable passing between commands
@@ -140,6 +142,11 @@ export class ConfigProvider {
       if (!config || !Array.isArray(config.commands)) {
         vscode.window.showErrorMessage('Invalid configuration file format. Expected "commands" array.');
         return null;
+      }
+      
+      // Process includes if present
+      if (config.include) {
+        await this.processIncludes(config, workspaceRoot, path.dirname(configPath));
       }
       
       // Load global variables into VariableManager if defined
@@ -321,5 +328,68 @@ export class ConfigProvider {
       }
       return stage;
     });
+  }
+
+  // Add new method to process included files
+  private async processIncludes(config: NiobiumConfig, workspaceRoot: string, basePath: string): Promise<void> {
+    const includes = Array.isArray(config.include) ? config.include : [config.include as string];
+    
+    for (const includePath of includes) {
+      try {
+        // Resolve the include path relative to the base path
+        const fullPath = path.isAbsolute(includePath)
+          ? includePath
+          : path.resolve(basePath, includePath);
+        
+        // Check if file exists
+        if (!fs.existsSync(fullPath)) {
+          vscode.window.showWarningMessage(`Included configuration file not found: ${includePath}`);
+          continue;
+        }
+        
+        const includeContent = fs.readFileSync(fullPath, 'utf8');
+        const includeConfig = yaml.load(includeContent) as Partial<NiobiumConfig>;
+        
+        // Merge configs
+        if (includeConfig.commands) {
+          config.commands = [...config.commands, ...includeConfig.commands];
+        }
+        
+        if (includeConfig.stages) {
+          config.stages = [...(config.stages || []), ...includeConfig.stages];
+        }
+        
+        if (includeConfig.sequences) {
+          config.sequences = [...(config.sequences || []), ...includeConfig.sequences];
+        }
+        
+        if (includeConfig.containers) {
+          config.containers = [...(config.containers || []), ...includeConfig.containers];
+        }
+        
+        if (includeConfig.variables) {
+          config.variables = {
+            ...(config.variables || {}),
+            ...includeConfig.variables
+          };
+        }
+        
+        // Process nested includes recursively
+        if (includeConfig.include) {
+          const nestedConfig = {
+            commands: config.commands,
+            stages: config.stages,
+            sequences: config.sequences,
+            containers: config.containers,
+            variables: config.variables,
+            include: includeConfig.include
+          };
+          
+          await this.processIncludes(nestedConfig, workspaceRoot, path.dirname(fullPath));
+        }
+      } catch (error) {
+        vscode.window.showWarningMessage(`Error processing included file ${includePath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 } 
