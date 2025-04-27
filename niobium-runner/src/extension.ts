@@ -11,6 +11,8 @@ import { JobOutputService } from './ui/jobOutputService';
 import { FileWatcherService } from './utils/fileWatcherService';
 import { registerFileWatcherView } from './views/fileWatcherView';
 import { KeyboardShortcutsManager } from './utils/keyboardShortcutsManager';
+import { CustomPanel } from './ui/customPanel';
+import { CustomPanelViewProvider } from './views/customPanelView';
 
 // Function to log keyboard shortcuts information
 function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
@@ -76,6 +78,16 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.window.registerTreeDataProvider(
     'niobium-container',
     containerViewProvider
+  );
+
+  // Register the custom panel view provider for the niobium tab
+  const customPanelViewProvider = new CustomPanelViewProvider(context.extensionUri);
+  
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      CustomPanelViewProvider.viewType,
+      customPanelViewProvider
+    )
   );
 
   // Initialize file watcher service
@@ -850,6 +862,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Auto-show Runner Panel is now ${newState}`);
   });
 
+  // Register the showCustomTab command
+  const showCustomTab = vscode.commands.registerCommand('niobium-runner.showCustomTab', () => {
+    // Focus the built-in panel view containing our custom tab
+    vscode.commands.executeCommand('workbench.view.extension.niobium-panel-container');
+  });
+
   // Register all commands
   context.subscriptions.push(
     statusBarItem,
@@ -875,7 +893,8 @@ export function activate(context: vscode.ExtensionContext) {
     manageFileWatchers,
     toggleAutoShowPanel,
     manageKeyboardShortcuts,
-    syncKeyboardShortcuts
+    syncKeyboardShortcuts,
+    showCustomTab
   );
 }
 

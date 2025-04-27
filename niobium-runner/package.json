@@ -34,10 +34,12 @@
     "onCommand:niobium-runner.refreshFileWatchers",
     "onCommand:niobium-runner.manageFileWatchers",
     "onCommand:niobium-runner.toggleAutoShowPanel",
+    "onCommand:niobium-runner.showCustomTab",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container",
     "onView:niobium-file-watchers",
+    "onView:niobium-custom-panel",
     "onCommand:niobium-runner.manageKeyboardShortcuts",
     "onCommand:niobium-runner.syncKeyboardShortcuts"
   ],
@@ -47,6 +49,13 @@
       "activitybar": [
         {
           "id": "niobium-sidebar",
+          "title": "Niobium",
+          "icon": "media/wasp-icon.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "niobium-panel-container",
           "title": "Niobium",
           "icon": "media/wasp-icon.svg"
         }
@@ -75,8 +84,21 @@
           "contextualTitle": "File Watchers",
           "when": "workbenchState != empty"
         }
+      ],
+      "niobium-panel-container": [
+        {
+          "id": "niobium-custom-panel",
+          "name": "Niobium",
+          "icon": "media/wasp-icon.svg"
+        }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "niobium-dashboard",
+        "contents": "No configuration file found.\n[Create New Configuration File](command:niobium-runner.createConfigFile)"
+      }
+    ],
     "menus": {
       "view/title": [
         {
@@ -107,6 +129,13 @@
         {
           "command": "niobium-runner.toggleAllFileWatchers",
           "when": "view == niobium-file-watchers",
+          "group": "navigation"
+        }
+      ],
+      "panel/title": [
+        {
+          "command": "niobium-runner.showCustomTab",
+          "when": "activePanel == 'workbench.panel.output' || activePanel == 'workbench.panel.terminal' || activePanel == 'workbench.panel.markers'",
           "group": "navigation"
         }
       ],
@@ -287,6 +316,11 @@
       {
         "command": "niobium-runner.toggleAutoShowPanel",
         "title": "Niobium: Toggle Auto-Show Runner Panel"
+      },
+      {
+        "command": "niobium-runner.showCustomTab",
+        "title": "Niobium: Show Custom Tab",
+        "icon": "$(beaker)"
       }
     ],
     "iconThemes": [
