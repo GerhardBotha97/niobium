@@ -37,7 +37,9 @@
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container",
-    "onView:niobium-file-watchers"
+    "onView:niobium-file-watchers",
+    "onCommand:niobium-runner.manageKeyboardShortcuts",
+    "onCommand:niobium-runner.syncKeyboardShortcuts"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -253,6 +255,16 @@
         "icon": "$(keyboard)"
       },
       {
+        "command": "niobium-runner.manageKeyboardShortcuts",
+        "title": "Niobium: Manage Keyboard Shortcuts",
+        "icon": "$(keyboard)"
+      },
+      {
+        "command": "niobium-runner.syncKeyboardShortcuts",
+        "title": "Niobium: Sync Keyboard Shortcuts",
+        "icon": "$(sync)"
+      },
+      {
         "command": "niobium-runner.refreshFileWatchers",
         "title": "Niobium: Refresh File Watchers",
         "icon": "$(refresh)"
@@ -318,6 +330,52 @@
           ],
           "default": "info",
           "description": "Log level for Niobium Runner"
+        },
+        "niobium-runner.keyboardShortcuts": {
+          "type": "object",
+          "description": "Custom keyboard shortcuts for Niobium Runner commands",
+          "properties": {
+            "runCommand": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+r", "mac": "cmd+shift+r" },
+              "description": "Keyboard shortcut for Run Command"
+            },
+            "runStage": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+s", "mac": "cmd+shift+s" },
+              "description": "Keyboard shortcut for Run Stage"
+            },
+            "runSequence": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+q", "mac": "cmd+shift+q" },
+              "description": "Keyboard shortcut for Run Sequence"
+            },
+            "showOutput": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+o", "mac": "cmd+shift+o" },
+              "description": "Keyboard shortcut for Show Output"
+            },
+            "showDashboard": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+d", "mac": "cmd+shift+d" },
+              "description": "Keyboard shortcut for Show Dashboard"
+            },
+            "runContainer": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+c", "mac": "cmd+shift+c" },
+              "description": "Keyboard shortcut for Run Docker Container"
+            },
+            "refreshViews": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+f5", "mac": "cmd+shift+f5" },
+              "description": "Keyboard shortcut for Refresh Views"
+            },
+            "showKeyboardShortcuts": {
+              "type": "object",
+              "default": { "key": "ctrl+shift+k", "mac": "cmd+shift+k" },
+              "description": "Keyboard shortcut for Show Keyboard Shortcuts"
+            }
+          }
         },
         "niobium-runner.fileWatchers.enabled": {
           "type": "boolean",

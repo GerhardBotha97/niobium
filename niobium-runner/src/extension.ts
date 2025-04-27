@@ -10,17 +10,15 @@ import { IgnoreProvider } from './utils/ignoreUtils';
 import { JobOutputService } from './ui/jobOutputService';
 import { FileWatcherService } from './utils/fileWatcherService';
 import { registerFileWatcherView } from './views/fileWatcherView';
+import { KeyboardShortcutsManager } from './utils/keyboardShortcutsManager';
 
 // Function to log keyboard shortcuts information
 function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
+  const shortcutManager = KeyboardShortcutsManager.getInstance();
+  const shortcutStrings = shortcutManager.getShortcutsAsStrings();
+  
   console.log('Niobium Runner keyboard shortcuts:');
-  console.log('Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)');
-  console.log('Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)');
-  console.log('Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)');
-  console.log('Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)');
-  console.log('Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)');
-  console.log('Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)');
-  console.log('Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS) - when focused on Niobium views');
+  shortcutStrings.forEach(shortcut => console.log(shortcut));
   
   // Check if this is the first activation after adding shortcuts
   const hasShownShortcuts = context.globalState.get('niobium.hasShownShortcuts', false);
@@ -33,17 +31,7 @@ function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
     ).then(selection => {
       if (selection === 'View Shortcuts') {
         // Show a quick pick with the keyboard shortcuts
-        const shortcuts = [
-          'Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)',
-          'Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)',
-          'Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)',
-          'Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)',
-          'Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)',
-          'Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)',
-          'Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS)'
-        ];
-        
-        vscode.window.showQuickPick(shortcuts, {
+        vscode.window.showQuickPick(shortcutStrings, {
           placeHolder: 'Niobium Runner Keyboard Shortcuts'
         });
       }
@@ -64,6 +52,10 @@ export function activate(context: vscode.ExtensionContext) {
   // Initialize the ignore provider
   const ignoreProvider = IgnoreProvider.getInstance();
   ignoreProvider.initialize(context);
+
+  // Initialize the keyboard shortcuts manager
+  const keyboardShortcutsManager = KeyboardShortcutsManager.getInstance();
+  keyboardShortcutsManager.initialize(context);
 
   // Log keyboard shortcuts information
   logKeyboardShortcutsInfo(context);
@@ -125,24 +117,25 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register command to show keyboard shortcuts
   const showKeyboardShortcuts = vscode.commands.registerCommand('niobium-runner.showKeyboardShortcuts', () => {
-    // Show a quick pick with the keyboard shortcuts
-    const shortcuts = [
-      'Run Command: Ctrl+Shift+R (Cmd+Shift+R on macOS)',
-      'Run Stage: Ctrl+Shift+S (Cmd+Shift+S on macOS)',
-      'Run Sequence: Ctrl+Shift+Q (Cmd+Shift+Q on macOS)',
-      'Show Output: Ctrl+Shift+O (Cmd+Shift+O on macOS)',
-      'Show Dashboard: Ctrl+Shift+D (Cmd+Shift+D on macOS)',
-      'Run Docker Container: Ctrl+Shift+C (Cmd+Shift+C on macOS)',
-      'Refresh Views: Ctrl+Shift+F5 (Cmd+Shift+F5 on macOS)'
-    ];
-    
-    vscode.window.showQuickPick(shortcuts, {
-      placeHolder: 'Niobium Runner Keyboard Shortcuts'
-    });
+    const shortcutManager = KeyboardShortcutsManager.getInstance();
+    shortcutManager.showKeyboardShortcutsManager();
   });
   
-  // Add the command to the context subscriptions
-  context.subscriptions.push(showKeyboardShortcuts);
+  // Register command to manage keyboard shortcuts
+  const manageKeyboardShortcuts = vscode.commands.registerCommand('niobium-runner.manageKeyboardShortcuts', () => {
+    const shortcutManager = KeyboardShortcutsManager.getInstance();
+    shortcutManager.showKeyboardShortcutsManager();
+  });
+  
+  // Register command to sync keyboard shortcuts
+  const syncKeyboardShortcuts = vscode.commands.registerCommand('niobium-runner.syncKeyboardShortcuts', async () => {
+    const shortcutManager = KeyboardShortcutsManager.getInstance();
+    await shortcutManager.syncKeyboardShortcuts();
+    vscode.window.showInformationMessage('Keyboard shortcuts synced successfully');
+  });
+  
+  // Add the commands to the context subscriptions
+  context.subscriptions.push(showKeyboardShortcuts, manageKeyboardShortcuts, syncKeyboardShortcuts);
 
   // Register refresh commands
   context.subscriptions.push(
@@ -880,7 +873,9 @@ export function activate(context: vscode.ExtensionContext) {
     addDockerContainer,
     toggleAllFileWatchers,
     manageFileWatchers,
-    toggleAutoShowPanel
+    toggleAutoShowPanel,
+    manageKeyboardShortcuts,
+    syncKeyboardShortcuts
   );
 }
 
