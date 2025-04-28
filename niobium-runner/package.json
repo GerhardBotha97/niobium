@@ -35,6 +35,9 @@
     "onCommand:niobium-runner.manageFileWatchers",
     "onCommand:niobium-runner.toggleAutoShowPanel",
     "onCommand:niobium-runner.showCustomTab",
+    "onCommand:niobium-runner.refreshCustomPanel",
+    "onCommand:niobium-runner.focusOnNiobiumView",
+    "onCommand:niobium-runner.showSimpleNiobiumPanel",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container",
@@ -87,7 +90,7 @@
       ],
       "niobium-panel-container": [
         {
-          "id": "niobium-custom-panel",
+          "id": "niobium-results-view",
           "name": "Niobium",
           "icon": "media/wasp-icon.svg"
         }
@@ -104,6 +107,11 @@
         {
           "command": "niobium-runner.refreshViews",
           "when": "view == niobium-dashboard || view == niobium-container",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.refreshResultsView",
+          "when": "view == niobium-results-view",
           "group": "navigation"
         },
         {
@@ -129,6 +137,11 @@
         {
           "command": "niobium-runner.toggleAllFileWatchers",
           "when": "view == niobium-file-watchers",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.refreshResultsView",
+          "when": "view == niobium-results-view",
           "group": "navigation"
         }
       ],
@@ -194,9 +207,19 @@
     },
     "commands": [
       {
+        "command": "niobium-runner.focusOnResultsView",
+        "title": "Niobium: Focus Results View",
+        "icon": "$(focus)"
+      },
+      {
         "command": "niobium-runner.showDashboard",
         "title": "Niobium: Show Dashboard",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "niobium-runner.showSimpleNiobiumPanel",
+        "title": "Niobium: Show Simple Panel",
+        "icon": "$(window)"
       },
       {
         "command": "niobium-runner.showRunner",
@@ -321,6 +344,33 @@
         "command": "niobium-runner.showCustomTab",
         "title": "Niobium: Show Custom Tab",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "niobium-runner.refreshCustomPanel",
+        "title": "Niobium: Refresh Results Panel",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "niobium-runner.focusOnNiobiumView",
+        "title": "Niobium: Focus on Niobium Panel",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "niobium-runner.start",
+        "title": "Start Niobium"
+      },
+      {
+        "command": "niobium-runner.refreshResultsView",
+        "title": "Refresh Results",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "niobium-runner.showResultDetails",
+        "title": "Show Result Details"
+      },
+      {
+        "command": "niobium-runner.showFullReport",
+        "title": "Show Full Report"
       }
     ],
     "iconThemes": [

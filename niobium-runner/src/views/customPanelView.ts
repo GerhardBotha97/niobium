@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 export class CustomPanelViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'niobium-custom-panel';
@@ -14,116 +13,91 @@ export class CustomPanelViewProvider implements vscode.WebviewViewProvider {
     context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ) {
+    console.log('Resolving Niobium panel webview');
     this._view = webviewView;
 
     webviewView.webview.options = {
-      // Enable JavaScript in the webview
       enableScripts: true,
       localResourceRoots: [this._extensionUri]
     };
 
-    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+    // Set simple HTML content with just a button
+    webviewView.webview.html = this._getSimpleHtmlForWebview();
 
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage(
       message => {
+        console.log('Received message from webview:', message);
         switch (message.command) {
-          case 'alert':
-            vscode.window.showInformationMessage(message.text);
+          case 'buttonClicked':
+            vscode.window.showInformationMessage('Button was clicked!');
             return;
         }
       }
     );
   }
 
-  private _getHtmlForWebview(webview: vscode.Webview): string {
+  public refresh(): void {
+    if (this._view) {
+      this._view.webview.html = this._getSimpleHtmlForWebview();
+    } else {
+      vscode.window.showErrorMessage('Cannot refresh - Niobium panel is not initialized.');
+    }
+  }
+
+  private _getSimpleHtmlForWebview(): string {
     return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Niobium Tab</title>
+        <title>Niobium</title>
         <style>
           body {
             font-family: var(--vscode-font-family);
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
             padding: 20px;
-          }
-          .container {
-            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
           }
           h1 {
             color: var(--vscode-textLink-foreground);
-            font-size: 1.2em;
-            margin-bottom: 15px;
+            font-size: 20px;
+            margin-bottom: 20px;
           }
-          .card {
-            background-color: var(--vscode-editor-inactiveSelectionBackground);
-            border-radius: 5px;
-            padding: 12px;
-            margin-bottom: 10px;
-          }
-          .card-title {
-            font-weight: bold;
-            margin-bottom: 6px;
-          }
-          .card-content {
-            margin-bottom: 10px;
-          }
-          button {
+          .action-button {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            padding: 8px 12px;
+            padding: 10px 16px;
             cursor: pointer;
-            border-radius: 3px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 10px 0;
           }
-          button:hover {
+          .action-button:hover {
             background-color: var(--vscode-button-hoverBackground);
-          }
-          .actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 15px;
           }
         </style>
       </head>
       <body>
-        <div class="container">
-          <h1>Niobium Runner</h1>
-          
-          <div class="card">
-            <div class="card-title">Active Tasks</div>
-            <div class="card-content">View and manage your running tasks.</div>
-          </div>
-          
-          <div class="card">
-            <div class="card-title">Recent Commands</div>
-            <div class="card-content">Quick access to your recent commands.</div>
-          </div>
-          
-          <div class="actions">
-            <button id="run-button">Run Command</button>
-            <button id="alert-button">Show Info</button>
-          </div>
-        </div>
+        <h1>Niobium</h1>
+        <button class="action-button" id="clickable-button">Click Me</button>
+        
         <script>
           const vscode = acquireVsCodeApi();
           
-          // Handle the show info button
-          document.getElementById('alert-button').addEventListener('click', () => {
+          // Add click event listener to the button
+          document.getElementById('clickable-button').addEventListener('click', () => {
             vscode.postMessage({
-              command: 'alert',
-              text: 'Niobium Runner is active!'
-            });
-          });
-          
-          // Handle the run command button
-          document.getElementById('run-button').addEventListener('click', () => {
-            vscode.postMessage({
-              command: 'runCommand'
+              command: 'buttonClicked'
             });
           });
         </script>

@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 export class CustomPanel {
   public static currentPanel: CustomPanel | undefined;
@@ -9,30 +8,19 @@ export class CustomPanel {
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this._panel = panel;
     
-    // Set the webview's initial html content
+    // Set the webview's initial html content with a simple button
     this._update();
     
     // Listen for when the panel is disposed
     // This happens when the user closes the panel or when the panel is closed programmatically
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     
-    // Update the content based on view changes
-    this._panel.onDidChangeViewState(
-      e => {
-        if (this._panel.visible) {
-          this._update();
-        }
-      },
-      null,
-      this._disposables
-    );
-    
     // Handle messages from the webview
     this._panel.webview.onDidReceiveMessage(
       message => {
         switch (message.command) {
-          case 'alert':
-            vscode.window.showInformationMessage(message.text);
+          case 'buttonClicked':
+            vscode.window.showInformationMessage('Button was clicked!');
             return;
         }
       },
@@ -43,21 +31,17 @@ export class CustomPanel {
   
   // Create or show panel
   public static createOrShow(extensionUri: vscode.Uri): CustomPanel {
-    const column = vscode.window.activeTextEditor
-      ? vscode.window.activeTextEditor.viewColumn
-      : undefined;
-    
     // If we already have a panel, show it
     if (CustomPanel.currentPanel) {
-      CustomPanel.currentPanel._panel.reveal(column);
+      CustomPanel.currentPanel._panel.reveal();
       return CustomPanel.currentPanel;
     }
     
     // Otherwise, create a new panel
     const panel = vscode.window.createWebviewPanel(
-      'niobiumCustom',
-      'My Custom Tab',
-      { viewColumn: column || vscode.ViewColumn.One, preserveFocus: true },
+      'niobium',
+      'Niobium',
+      vscode.ViewColumn.Active,
       {
         // Enable JavaScript in the webview
         enableScripts: true,
@@ -72,6 +56,15 @@ export class CustomPanel {
     
     CustomPanel.currentPanel = new CustomPanel(panel, extensionUri);
     return CustomPanel.currentPanel;
+  }
+  
+  // Register a command to show the Niobium panel
+  public static registerCommand(context: vscode.ExtensionContext): void {
+    const command = vscode.commands.registerCommand('niobium.showResultsPanel', () => {
+      CustomPanel.createOrShow(context.extensionUri);
+    });
+    
+    context.subscriptions.push(command);
   }
   
   // Public method to reveal the panel
@@ -96,63 +89,62 @@ export class CustomPanel {
   
   // Update the webview content
   private _update(): void {
-    if (!this._panel.visible) {
-      return;
-    }
-    
-    this._panel.title = 'My Custom Tab';
-    this._panel.webview.html = this._getHtmlForWebview();
+    this._panel.title = 'Niobium';
+    this._panel.webview.html = this._getSimpleHtmlWithButton();
   }
   
-  // Generate the HTML for the webview
-  private _getHtmlForWebview(): string {
+  // Generate simple HTML with just a button
+  private _getSimpleHtmlWithButton(): string {
     return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Custom Tab</title>
+        <title>Niobium</title>
         <style>
           body {
             font-family: var(--vscode-font-family);
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
             padding: 20px;
-          }
-          .container {
-            max-width: 800px;
-            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
           }
           h1 {
             color: var(--vscode-textLink-foreground);
+            font-size: 20px;
+            margin-bottom: 20px;
           }
-          button {
+          .action-button {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            padding: 8px 12px;
+            padding: 10px 16px;
             cursor: pointer;
-            border-radius: 3px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
           }
-          button:hover {
+          .action-button:hover {
             background-color: var(--vscode-button-hoverBackground);
           }
         </style>
       </head>
       <body>
-        <div class="container">
-          <h1>My Custom Tab</h1>
-          <p>This is a custom tab that appears next to the terminal panel.</p>
-          <p>You can add your own functionality here.</p>
-          <button id="alert-button">Click Me</button>
-        </div>
+        <h1>Niobium Panel</h1>
+        <button class="action-button" id="clickable-button">Click Me</button>
+        
         <script>
           const vscode = acquireVsCodeApi();
-          document.getElementById('alert-button').addEventListener('click', () => {
+          
+          document.getElementById('clickable-button').addEventListener('click', () => {
             vscode.postMessage({
-              command: 'alert',
-              text: 'Button clicked!'
+              command: 'buttonClicked'
             });
           });
         </script>

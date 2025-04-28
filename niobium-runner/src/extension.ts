@@ -12,7 +12,7 @@ import { FileWatcherService } from './utils/fileWatcherService';
 import { registerFileWatcherView } from './views/fileWatcherView';
 import { KeyboardShortcutsManager } from './utils/keyboardShortcutsManager';
 import { CustomPanel } from './ui/customPanel';
-import { CustomPanelViewProvider } from './views/customPanelView';
+import { registerResultsTreeView } from './views/resultsTreeView';
 
 // Function to log keyboard shortcuts information
 function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
@@ -80,16 +80,16 @@ export function activate(context: vscode.ExtensionContext) {
     containerViewProvider
   );
 
-  // Register the custom panel view provider for the niobium tab
-  const customPanelViewProvider = new CustomPanelViewProvider(context.extensionUri);
+  // Register the Niobium results panel command
+  CustomPanel.registerCommand(context);
   
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      CustomPanelViewProvider.viewType,
-      customPanelViewProvider
-    )
-  );
-
+  // Register command to toggle results panel
+  const toggleResultsPanel = vscode.commands.registerCommand('niobium-runner.toggleResultsPanel', () => {
+    CustomPanel.createOrShow(context.extensionUri);
+  });
+  
+  context.subscriptions.push(toggleResultsPanel);
+  
   // Initialize file watcher service
   const fileWatcherService = FileWatcherService.getInstance(context);
   
@@ -862,13 +862,27 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Auto-show Runner Panel is now ${newState}`);
   });
 
-  // Register the showCustomTab command
-  const showCustomTab = vscode.commands.registerCommand('niobium-runner.showCustomTab', () => {
-    // Focus the built-in panel view containing our custom tab
-    vscode.commands.executeCommand('workbench.view.extension.niobium-panel-container');
-  });
+  // Register the results tree view
+  const resultsDataProvider = registerResultsTreeView(context);
 
-  // Register all commands
+  // Register command to refresh results tree view
+  const refreshResults = vscode.commands.registerCommand('niobium-runner.refreshResults', () => {
+    resultsDataProvider.refresh();
+    vscode.window.showInformationMessage('Results refreshed');
+  });
+  
+  // Register command to focus on the results view
+  const focusOnResultsView = vscode.commands.registerCommand('niobium-runner.focusOnResultsView', async () => {
+    try {
+      // Show the panel container with our view
+      await vscode.commands.executeCommand('workbench.view.extension.niobium-panel-container');
+      vscode.window.showInformationMessage('Niobium panel is now visible');
+    } catch (error) {
+      console.error('Error focusing on Niobium view:', error);
+      vscode.window.showErrorMessage(`Error focusing on Niobium view: ${error}`);
+    }
+  });
+  
   context.subscriptions.push(
     statusBarItem,
     showDashboard,
@@ -894,7 +908,10 @@ export function activate(context: vscode.ExtensionContext) {
     toggleAutoShowPanel,
     manageKeyboardShortcuts,
     syncKeyboardShortcuts,
-    showCustomTab
+    showKeyboardShortcuts,
+    toggleResultsPanel,
+    refreshResults,
+    focusOnResultsView
   );
 }
 
