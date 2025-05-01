@@ -1,5 +1,5 @@
-# Example .bluewaspignore file
-# This file uses gitignore syntax to specify files and directories to be ignored by Blue Wasp Runner.
+# Example .niobiumignore file
+# This file uses gitignore syntax to specify files and directories to be ignored by Niobium.
 
 # Ignore node_modules directory
 node_modules/

@@ -25,7 +25,7 @@ export class DockerRunner {
 
   constructor(context?: vscode.ExtensionContext) {
     this.docker = new Dockerode();
-    this.outputChannel = vscode.window.createOutputChannel('Blue Wasp Docker');
+    this.outputChannel = vscode.window.createOutputChannel('Niobium Docker');
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
     this.ignoreProvider = IgnoreProvider.getInstance();
   }

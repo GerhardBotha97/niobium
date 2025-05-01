@@ -1,4 +1,4 @@
-# Blue Wasp configuration file with stages, sequences, and failure handling
+# Niobium configuration file with stages, sequences, and failure handling
 
 # Individual commands
 commands:

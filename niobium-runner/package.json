@@ -70,7 +70,7 @@
           "id": "niobium-dashboard",
           "name": "Dashboard",
           "icon": "media/wasp-icon.svg",
-          "contextualTitle": "Blue Wasp Dashboard",
+          "contextualTitle": "Niobium Dashboard",
           "when": "workbenchState != empty"
         },
         {
@@ -376,8 +376,8 @@
     "iconThemes": [
       {
         "id": "niobium-icons",
-        "label": "Blue Wasp Icons",
-        "path": "./media/wasp-codicon.json"
+        "label": "Niobium Icons",
+        "path": "./themes/niobium-icons.json"
       }
     ],
     "iconFonts": [

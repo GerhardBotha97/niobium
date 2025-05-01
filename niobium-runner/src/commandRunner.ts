@@ -30,7 +30,7 @@ export class CommandRunner {
 
   constructor(context?: vscode.ExtensionContext) {
     this.configProvider = new ConfigProvider();
-    this.outputChannel = vscode.window.createOutputChannel('Blue Wasp Runner');
+    this.outputChannel = vscode.window.createOutputChannel('Niobium');
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
     this.dockerRunner = new DockerRunner(context);
     this.ignoreProvider = IgnoreProvider.getInstance();

@@ -1,4 +1,4 @@
-# Example .bluewasp.yml configuration with Docker containers in stages
+# Example .niobium.yml configuration with Docker containers in stages
 
 # Regular commands
 commands:

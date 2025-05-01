@@ -1,4 +1,4 @@
-# Example .bluewasp.yml configuration file with Docker containers
+# Example .niobium.yml configuration file with Docker containers
 
 # Regular commands (these already worked before)
 commands:

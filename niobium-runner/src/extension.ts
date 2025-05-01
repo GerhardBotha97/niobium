@@ -45,7 +45,7 @@ function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Blue Wasp Runner is now active!');
+  console.log('Niobium is now active!');
 
   const configProvider = new ConfigProvider();
   const commandRunner = new CommandRunner(context);
@@ -204,7 +204,7 @@ export function activate(context: vscode.ExtensionContext) {
       
       // If the dashboard couldn't be created, show an error
       if (!dashboard) {
-        vscode.window.showErrorMessage('Could not open Blue Wasp Dashboard. Please try again.');
+        vscode.window.showErrorMessage('Could not open Niobium Dashboard. Please try again.');
       }
     } catch (error) {
       // Handle any errors

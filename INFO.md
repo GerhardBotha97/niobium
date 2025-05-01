@@ -1,19 +1,19 @@
-# Blue Wasp Runner - Command Reference
+# Niobium - Command Reference
 
 ## Configuration File
 
-Blue Wasp Runner uses `.bluewasp.yml` files to configure commands, stages, and sequences that can be executed from VS Code. The configuration file should be placed in your project root.
+Niobium uses `.niobium.yml` files to configure commands, stages, and sequences that can be executed from VS Code. The configuration file should be placed in your project root.
 
 ### Including Other Config Files
 
 To keep your main configuration file clean and organized, you can split it into multiple files and include them:
 
 ```yaml
-# Main .bluewasp.yml file
+# Main .niobium.yml file
 include:
-  - security.bluewasp.yml  # Include from same directory
-  - ./build/npm.bluewasp.yml  # Include from subdirectory
-  - /path/to/absolute/location.bluewasp.yml  # Include using absolute path
+  - security.niobium.yml  # Include from same directory
+  - ./build/npm.niobium.yml  # Include from subdirectory
+  - /path/to/absolute/location.niobium.yml  # Include using absolute path
 
 # Rest of your configuration...
 ```
@@ -24,15 +24,42 @@ The include feature supports:
 - Relative and absolute paths
 - Nested includes (included files can also include other files)
 
+Variables defined in the main configuration file are available in all included files. Commands, stages, and sequences defined in included files can be referenced from the main file or other included files.
+
+#### Best Practices for Using Includes
+
+1. **Split by Purpose**: Separate configs by their purpose (security, build, deploy)
+2. **Split by Technology**: Create separate files for different technologies (npm, docker, etc.)
+3. **Common Base**: Share common configurations across multiple projects
+4. **Environment-Specific**: Create separate files for different environments
+
+#### Example Project Structure with Includes
+
+```
+your-project/
+├── .niobium.yml           # Main config file
+├── security.niobium.yml   # Security scanning config
+└── build/
+    └── npm.niobium.yml    # NPM build commands config
+```
+
+#### Troubleshooting Includes
+
+If you encounter issues with included files:
+1. Check that the paths are correct relative to the including file
+2. Verify that included files have the correct YAML structure
+3. Check the VS Code log for any warnings or errors
+4. Try simplifying your configuration to isolate the problem
+
 See the "Examples" section for more details on using includes.
 
 ## Ignoring Files and Directories
 
-Blue Wasp Runner supports a `.bluewaspignore` file that allows you to specify files and directories that should be excluded from command execution and Docker volume operations. The ignore file uses the same syntax as `.gitignore`.
+Niobium supports a `.niobiumignore` file that allows you to specify files and directories that should be excluded from command execution and Docker volume operations. The ignore file uses the same syntax as `.gitignore`.
 
 ### Ignore File Format
 
-Create a `.bluewaspignore` file in your project root with patterns like:
+Create a `.niobiumignore` file in your project root with patterns like:
 
 ```
 # Ignore node_modules directory
@@ -57,7 +84,7 @@ node_modules/
 
 ### Ignore Behavior
 
-When Blue Wasp Runner encounters paths that match patterns in the `.bluewaspignore` file:
+When Niobium encounters paths that match patterns in the `.niobiumignore` file:
 
 - Commands with a working directory in an ignored path will not run (with a warning)
 - Docker volumes with sources in ignored paths will be skipped (with a warning)
@@ -65,7 +92,7 @@ When Blue Wasp Runner encounters paths that match patterns in the `.bluewaspigno
 
 This is useful for excluding large dependency directories, temporary build artifacts, and sensitive files from your command execution environment.
 
-A sample `.bluewaspignore` file is available in the `examples/sample.bluewaspignore` file for reference.
+A sample `.niobiumignore` file is available in the `examples/sample.niobiumignore` file for reference.
 
 ## Basic Structure
 
@@ -78,8 +105,8 @@ variables:
 
 # Include other configuration files
 include:
-  - security.bluewasp.yml
-  - ./build/npm.bluewasp.yml
+  - security.niobium.yml
+  - ./build/npm.niobium.yml
 
 commands:
   - name: Command Name
@@ -141,6 +168,7 @@ containers:
       - source: ./data/postgres
         target: /var/lib/postgresql/data
     restart_policy: unless-stopped
+```
 
 ## Command Properties
 
@@ -208,7 +236,7 @@ containers:
 
 ## Failure Handling
 
-Blue Wasp Runner provides granular control over how failures are handled:
+Niobium provides granular control over how failures are handled:
 
 - By default, when a command fails (returns a non-zero exit code), execution stops
 - Set `allow_failure: true` on a command to let it fail without stopping execution
@@ -219,7 +247,7 @@ Blue Wasp Runner provides granular control over how failures are handled:
 
 ## Variables and Variable Passing
 
-Blue Wasp Runner supports two types of variables:
+Niobium supports two types of variables:
 
 1. **Global Variables**: Defined at the top level of the configuration and available to all commands
 2. **Output Variables**: Generated by commands and passed to dependent commands
@@ -290,7 +318,7 @@ commands:
     depends_on: generate-build-id
 ```
 
-When using `depends_on`, Blue Wasp Runner will:
+When using `depends_on`, Niobium will:
 
 1. Ensure the dependency command runs first
 2. Make its output variables available to the dependent command
@@ -348,7 +376,7 @@ Here's a complete example demonstrating global variables and variable passing be
 ```yaml
 # Global variables - accessible in all commands
 variables:
-  PROJECT_NAME: bluewasp
+  PROJECT_NAME: niobium
   VERSION: 1.0.0
   BUILD_DIR: ./dist
   ARTIFACT_PREFIX: release
@@ -741,10 +769,10 @@ sequences:
 Using includes allows you to organize your configuration into logical sections:
 
 ```yaml
-# Main .bluewasp.yml
+# Main .niobium.yml
 include:
-  - security.bluewasp.yml
-  - ./build/npm.bluewasp.yml
+  - security.niobium.yml
+  - ./build/npm.niobium.yml
 
 variables:
   PROJECT_NAME: myproject
@@ -759,13 +787,13 @@ stages:
   - name: validate
     description: "Validate the project"
     commands:
-      - security-scan  # From security.bluewasp.yml
-      - lint-code      # From security.bluewasp.yml
-      - npm-test       # From npm.bluewasp.yml
+      - security-scan  # From security.niobium.yml
+      - lint-code      # From security.niobium.yml
+      - npm-test       # From npm.niobium.yml
 ```
 
 ```yaml
-# security.bluewasp.yml
+# security.niobium.yml
 commands:
   - name: security-scan
     description: "Run security scanning"
@@ -784,7 +812,7 @@ stages:
 ```
 
 ```yaml
-# build/npm.bluewasp.yml
+# build/npm.niobium.yml
 commands:
   - name: npm-install
     description: "Install npm dependencies"
@@ -814,29 +842,29 @@ This approach allows you to:
 There are several ways to run your configured items:
 
 1. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac), then:
-   - Type "Blue Wasp: Run Command" to run a single command
-   - Type "Blue Wasp: Run Stage" to run a stage
-   - Type "Blue Wasp: Run Sequence" to run a sequence
-   - Type "Blue Wasp: Run (All Types)" to select from all commands, stages, and sequences
-   - Type "Blue Wasp: Show Output Panel" to view the execution output
-   - Type "Blue Wasp: Run Docker Container" to start a Docker container
-   - Type "Blue Wasp: Stop Docker Container" to stop a Docker container
-   - Type "Blue Wasp: View Docker Container Logs" to view Docker logs
-   - Type "Blue Wasp: Remove Docker Container" to remove a Docker container
-   - Type "Blue Wasp: Add Docker Container Configuration" to create a new container config
+   - Type "Niobium: Run Command" to run a single command
+   - Type "Niobium: Run Stage" to run a stage
+   - Type "Niobium: Run Sequence" to run a sequence
+   - Type "Niobium: Run (All Types)" to select from all commands, stages, and sequences
+   - Type "Niobium: Show Output Panel" to view the execution output
+   - Type "Niobium: Run Docker Container" to start a Docker container
+   - Type "Niobium: Stop Docker Container" to stop a Docker container
+   - Type "Niobium: View Docker Container Logs" to view Docker logs
+   - Type "Niobium: Remove Docker Container" to remove a Docker container
+   - Type "Niobium: Add Docker Container Configuration" to create a new container config
 
 2. Select the command, stage, or sequence from the list that appears
 
 ## Docker Container Management
 
-Blue Wasp Runner provides commands for managing Docker containers:
+Niobium provides commands for managing Docker containers:
 
-- **Blue Wasp: Run Docker Container**: Start a container defined in the `containers` section
-- **Blue Wasp: Stop Docker Container**: Stop a running container
-- **Blue Wasp: Remove Docker Container**: Remove a container (stopping it first if needed)
-- **Blue Wasp: View Docker Container Logs**: View the logs from a container
-- **Blue Wasp: Show Docker Output**: Show the Docker output panel
-- **Blue Wasp: Add Docker Container Configuration**: Generate a Docker container configuration
+- **Niobium: Run Docker Container**: Start a container defined in the `containers` section
+- **Niobium: Stop Docker Container**: Stop a running container
+- **Niobium: Remove Docker Container**: Remove a container (stopping it first if needed)
+- **Niobium: View Docker Container Logs**: View the logs from a container
+- **Niobium: Show Docker Output**: Show the Docker output panel
+- **Niobium: Add Docker Container Configuration**: Generate a Docker container configuration
 
 ## Output and Execution Details
 
@@ -852,8 +880,8 @@ The extension captures and displays:
 
 This extension provides the following settings:
 
-- `bluewasp-runner.configFile`: The name of the configuration file (default: `.bluewasp.yml`)
-- `bluewasp-runner.showOutputOnRun`: Whether to automatically show the output panel when running (default: true)
+- `niobium.configFile`: The name of the configuration file (default: `.niobium.yml`)
+- `niobium.showOutputOnRun`: Whether to automatically show the output panel when running (default: true)
 
 ### Parallel Execution Example
 
@@ -869,7 +897,7 @@ stages:
   
   # Parallel execution
   - name: Parallel Stage
-    description: Run all commands simultaneously
+    description: Run all tasks simultaneously
     parallel: true
     commands:
       - First Command
@@ -888,4 +916,41 @@ stages:
         depends_on:
           - First Command
           - Second Command
-``` 
+```
+
+## Integrated Tools
+
+Niobium integrates with several popular development tools and technologies out of the box:
+
+### Build and Package Managers
+- **npm/Node.js**: Run scripts defined in package.json
+- **Python**: Execute Python scripts and use pip for package management
+- **Maven/Gradle**: Build Java applications
+
+### Container Technologies
+- **Docker**: Run containers, manage volumes, and execute commands in containers
+- **Docker Compose**: Run multi-container Docker applications
+
+### Version Control
+- **Git**: Run git commands and integrate with version control workflows
+
+### Testing Frameworks
+- **Jest**: Run JavaScript tests
+- **Pytest**: Run Python tests
+- **JUnit**: Run Java tests
+
+### CI/CD Integration
+- **GitHub Actions**: Integration with GitHub Actions workflows
+- **GitLab CI**: Integration with GitLab CI pipelines
+
+### Database Management
+- **PostgreSQL**: Run PostgreSQL in Docker with preconfigured settings
+- **MySQL/MariaDB**: Database container management
+- **MongoDB**: Database container management
+- **Redis**: Cache container management
+
+### Web Servers
+- **Nginx**: Web server container management
+- **Apache**: Web server container management
+
+To use these integrations, reference them in your commands or define containers using the appropriate images and configuration settings as shown in the examples.

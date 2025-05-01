@@ -1,4 +1,4 @@
-# Example .bluewasp.yml with inline Docker commands in stages
+# Example .niobium.yml with inline Docker commands in stages
 
 commands:
   - name: hello

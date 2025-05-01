@@ -1,4 +1,4 @@
-# Blue Wasp configuration file with parallel execution example
+# Niobium configuration file with parallel execution example
 
 # Individual commands - can be run directly or referenced in stages
 commands:
