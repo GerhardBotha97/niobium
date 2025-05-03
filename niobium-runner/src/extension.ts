@@ -883,6 +883,47 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   
+  // Register command to refresh remote configurations
+  const refreshRemoteConfigs = vscode.commands.registerCommand('niobium-runner.refreshRemoteConfigs', async () => {
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const rootPath = workspaceFolders[0].uri.fsPath;
+      
+      // Show progress
+      await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Refreshing remote configurations',
+        cancellable: false
+      }, async (progress) => {
+        progress.report({ increment: 0 });
+        
+        try {
+          // Load the config file with force refresh for remote includes
+          const config = await configProvider.loadConfigWithOptions(rootPath, {
+            forceRefreshRemoteIncludes: true
+          });
+          
+          progress.report({ increment: 100 });
+          
+          if (config) {
+            vscode.window.showInformationMessage('Remote configurations refreshed successfully');
+          } else {
+            vscode.window.showWarningMessage('No configurations found to refresh');
+          }
+        } catch (error) {
+          vscode.window.showErrorMessage(`Error refreshing configurations: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to refresh remote configurations: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+  
   context.subscriptions.push(
     statusBarItem,
     showDashboard,
@@ -911,7 +952,8 @@ export function activate(context: vscode.ExtensionContext) {
     showKeyboardShortcuts,
     toggleResultsPanel,
     refreshResults,
-    focusOnResultsView
+    focusOnResultsView,
+    refreshRemoteConfigs
   );
 }
 

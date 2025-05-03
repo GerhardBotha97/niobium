@@ -1,0 +1,46 @@
+# NPM build configuration file for Niobium
+# This file contains npm-related build commands and stages
+# It can be included from a main .niobium.yml file
+
+commands:
+  - name: npm-install
+    description: "Install npm dependencies"
+    command: npm install
+  
+  - name: npm-test
+    description: "Run tests"
+    command: npm test
+    depends_on: npm-install
+  
+  - name: npm-build
+    description: "Build the project"
+    command: npm run build
+    env:
+      NODE_ENV: production
+    depends_on: npm-install
+  
+  - name: npm-lint
+    description: "Lint the code"
+    command: npm run lint
+    depends_on: npm-install
+
+stages:
+  - name: build
+    description: "Build the npm project"
+    commands:
+      - npm-install
+      - npm-test
+      - npm-build
+  
+  - name: test
+    description: "Run tests only"
+    commands:
+      - npm-install
+      - npm-test
+  
+  - name: lint-and-test
+    description: "Lint and test the code"
+    commands:
+      - npm-install
+      - npm-lint
+      - npm-test 

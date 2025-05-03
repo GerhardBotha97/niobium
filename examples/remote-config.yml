@@ -1,0 +1,78 @@
+# Remote configuration for Niobium
+# This file demonstrates a configuration that would be included from a remote source
+# When hosted for actual use, this file would be served from a web server or repository
+
+commands:
+  - name: run-trivy
+    description: "Run Trivy container vulnerability scanner"
+    image: aquasec/trivy
+    image_tag: latest
+    command: filesystem --format json -o /output/trivy-results.json /src
+    output_file: trivy-results.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./results
+        target: /output
+        readonly: false
+  
+  - name: run-semgrep
+    description: "Run Semgrep static analysis"
+    image: returntocorp/semgrep
+    image_tag: latest
+    command: --config=auto --json -o /output/semgrep-results.json /src
+    output_file: semgrep-results.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./results
+        target: /output
+        readonly: false
+  
+  - name: run-checkov
+    description: "Run Checkov infrastructure-as-code scanner"
+    image: bridgecrew/checkov
+    image_tag: latest
+    command: --directory /src --output json --output-file-path /output/checkov-results.json
+    output_file: checkov-results.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./results
+        target: /output
+        readonly: false
+
+stages:
+  - name: security-scans
+    description: "Run security scans"
+    commands:
+      - run-trivy
+      - run-semgrep
+      - run-checkov
+  
+  - name: container-scan
+    description: "Run container vulnerability scan only"
+    commands:
+      - run-trivy
+  
+  - name: code-analysis
+    description: "Run static code analysis"
+    commands:
+      - run-semgrep
+
+# This file can be included in a main configuration using:
+#
+# include:
+#   url: http://localhost:8000/remote-config.yml
+#   refresh:
+#     force: true  # Always refresh
+#
+# Or for GitHub:
+#
+# include:
+#   url: https://github.com/niobium/examples/blob/main/remote-config.yml
+#   auth:
+#     type: token
+#     token: ${GITHUB_TOKEN}
+#   refresh:
+#     interval: 1440  # Refresh daily 

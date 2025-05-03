@@ -38,6 +38,7 @@
     "onCommand:niobium-runner.refreshCustomPanel",
     "onCommand:niobium-runner.focusOnNiobiumView",
     "onCommand:niobium-runner.showSimpleNiobiumPanel",
+    "onCommand:niobium-runner.refreshRemoteConfigs",
     "workspaceContains:.niobium.yml",
     "onView:niobium-dashboard",
     "onView:niobium-container",
@@ -107,6 +108,11 @@
         {
           "command": "niobium-runner.refreshViews",
           "when": "view == niobium-dashboard || view == niobium-container",
+          "group": "navigation"
+        },
+        {
+          "command": "niobium-runner.refreshRemoteConfigs",
+          "when": "view == niobium-dashboard",
           "group": "navigation"
         },
         {
@@ -371,6 +377,11 @@
       {
         "command": "niobium-runner.showFullReport",
         "title": "Show Full Report"
+      },
+      {
+        "command": "niobium-runner.refreshRemoteConfigs",
+        "title": "Niobium: Refresh Remote Configurations",
+        "icon": "$(cloud-download)"
       }
     ],
     "iconThemes": [

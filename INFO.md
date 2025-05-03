@@ -18,11 +18,292 @@ include:
 # Rest of your configuration...
 ```
 
+#### Remote File Inclusion
+
+Niobium also supports including configuration files from remote locations, such as GitHub repositories, GitLab projects, or custom servers:
+
+```yaml
+# Include a remote configuration file from GitHub
+include:
+  url: https://github.com/user/repo/blob/main/.niobium.yml
+  auth:
+    type: token
+    token: ${GITHUB_TOKEN}  # Environment variable reference
+  refresh:
+    interval: 60  # Refresh every 60 minutes
+
+# Rest of your configuration...
+```
+
+You can include multiple remote files in a single configuration:
+
+```yaml
+include:
+  # GitHub configuration with token authentication
+  - url: https://github.com/user/repo/blob/main/commands.yml
+    auth:
+      type: token
+      token: ${GITHUB_TOKEN}
+    refresh:
+      force: true  # Always refresh this file
+
+  # GitLab configuration with token authentication
+  - url: https://gitlab.com/user/repo/blob/main/stages.yml
+    auth:
+      type: token
+      token: ${GITLAB_TOKEN}
+    refresh:
+      interval: 1440  # Refresh daily (24 hours = 1440 minutes)
+
+  # Custom server with basic authentication
+  - url: https://private-server.com/api/config.yml
+    auth:
+      type: basic
+      username: user
+      password: ${API_PASSWORD}
+    # No refresh options means it will only be downloaded once
+
+  # Local files can still be included in the same list
+  - ./local-file.yml
+```
+
+#### Remote Include Options
+
+Remote includes support the following options:
+
+| Option | Description |
+|--------|-------------|
+| `url` | Required. The URL of the remote configuration file |
+| `auth` | Optional. Authentication settings for the remote server |
+| `auth.type` | Authentication type: `token`, `basic`, `oauth`, or `none` |
+| `auth.token` | Token for token-based or OAuth authentication |
+| `auth.username` | Username for basic authentication |
+| `auth.password` | Password for basic authentication |
+| `refresh` | Optional. Settings for refreshing the remote file |
+| `refresh.interval` | Time in minutes after which the file should be refreshed |
+| `refresh.force` | If true, always refresh the file on each load |
+
+#### Authentication Types
+
+Niobium supports several authentication methods for remote files:
+
+- **Token Authentication**: For GitHub, GitLab, and other services that use token-based auth
+  ```yaml
+  auth:
+    type: token
+    token: ${GITHUB_TOKEN}
+  ```
+
+- **Basic Authentication**: For servers that require username/password
+  ```yaml
+  auth:
+    type: basic
+    username: user
+    password: ${API_PASSWORD}
+  ```
+
+- **OAuth Authentication**: For services that use OAuth tokens
+  ```yaml
+  auth:
+    type: oauth
+    token: ${OAUTH_TOKEN}
+  ```
+
+- **No Authentication**: For public URLs
+  ```yaml
+  auth:
+    type: none
+  ```
+
+#### File Refresh Policies
+
+You can control when remote files are refreshed:
+
+- **Interval-based refresh**: Download the file again after a specified time period
+  ```yaml
+  refresh:
+    interval: 60  # Refresh every 60 minutes
+  ```
+
+- **Force refresh**: Always download the file on each configuration load
+  ```yaml
+  refresh:
+    force: true
+  ```
+
+- **No refresh policy**: Download the file only if it doesn't exist locally
+  ```yaml
+  # No refresh section means the file is downloaded only once
+  ```
+
+#### Environment Variable Substitution
+
+You can use environment variables in remote include configurations, including in URLs and authentication credentials:
+
+```yaml
+include:
+  url: https://${GITHUB_USER}.github.com/${REPO_NAME}/blob/main/config.yml
+  auth:
+    type: token
+    token: ${AUTH_TOKEN}
+```
+
+#### Manually Refreshing Remote Configurations
+
+You can manually refresh all remote configurations using the VS Code command palette:
+
+1. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
+2. Type "Niobium: Refresh Remote Configurations"
+3. Press Enter to execute the command
+
+This will force-refresh all remote configuration files regardless of their refresh settings.
+
+#### Complete Remote Inclusion Example
+
+Below is a complete example of using remote configuration files for security scanning, demonstrating how to structure your project for remote includes:
+
+**Main Configuration** (`.niobium.yml`):
+
+```yaml
+# Main .niobium.yml file
+variables:
+  PROJECT_NAME: security-scanner
+  GITHUB_TOKEN: ${GITHUB_TOKEN}  # Environment variable reference
+
+# Include the remote security scanning configuration
+include:
+  url: http://localhost:8000/security-scans.yml
+  refresh:
+    force: true  # Always pull the latest version
+
+# Define local commands
+commands:
+  - name: setup-environment
+    description: Prepare local environment for security scanning
+    command: mkdir -p ./.niobium_results ./niobium_report
+
+# Define local stages that reference remote commands
+stages:
+  - name: Setup
+    description: Prepare the environment
+    commands:
+      - setup-environment
+  
+  - name: Report
+    description: Generate a report from scan results
+    commands:
+      - name: generate-report
+        description: Create summary report
+        command: |
+          echo "# Security Scan Results for ${PROJECT_NAME}" > ./niobium_report/summary.md
+          echo "Generated on $(date)" >> ./niobium_report/summary.md
+          echo "See JSON files for detailed results." >> ./niobium_report/summary.md
+
+# Define sequences that combine local and remote stages
+sequences:
+  - name: Full Security Assessment
+    description: Run a complete security scan with all tools
+    stages:
+      - Setup
+      - Parallel IaC Security Scans  # This references a stage from the remote config
+      - Cleanup                      # This references a stage from the remote config
+      - Report
+```
+
+**Remote Configuration** (`security-scans.yml` - served from http://localhost:8000):
+
+```yaml
+# Remote security scanning configuration
+commands:
+  - name: checkov
+    description: Run Checkov to scan for security issues in IaC
+    image: bridgecrew/checkov
+    image_tag: latest
+    command: --directory /src --output json --output-file-path /output
+    output_file: checkov-results.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./.niobium_results
+        target: /output
+        readonly: false
+  
+  - name: trivy
+    description: Run container vulnerability scanning
+    image: aquasec/trivy
+    image_tag: latest
+    command: config --format json -o /output/trivy-results.json /src
+    output_file: trivy-results.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./.niobium_results
+        target: /output
+        readonly: false
+
+stages:
+  - name: Parallel IaC Security Scans
+    description: Run all security scans in parallel
+    parallel: true
+    commands:
+      - checkov
+      - trivy
+  
+  - name: Cleanup
+    description: Process scan results
+    commands:
+      - name: organize-results
+        command: |
+          mkdir -p ./niobium_report
+          cp ./.niobium_results/*.json ./niobium_report/ || echo "No results found"
+```
+
+**GitHub Remote Configuration Example**:
+
+To use a GitHub repository instead of a local server:
+
+```yaml
+# Include from GitHub
+include:
+  url: https://github.com/organization/security-scans/blob/main/security-scans.yml
+  auth:
+    type: token
+    token: ${GITHUB_TOKEN}
+  refresh:
+    interval: 1440  # Refresh daily
+```
+
+**Multiple Remote Includes Example**:
+
+```yaml
+# Include multiple remote configurations
+include:
+  - url: https://github.com/org/security-tools/blob/main/checkov.yml
+    auth:
+      type: token
+      token: ${GITHUB_TOKEN}
+  
+  - url: https://gitlab.com/org/security-tools/blob/main/trivy.yml
+    auth:
+      type: token
+      token: ${GITLAB_TOKEN}
+  
+  - url: https://internal-server.com/semgrep-config.yml
+    auth:
+      type: basic
+      username: ${API_USER}
+      password: ${API_PASSWORD}
+```
+
 The include feature supports:
 - Single file inclusion: `include: path/to/file.yml`
 - Multiple file inclusion: `include: [file1.yml, file2.yml]` or using the array syntax shown above
 - Relative and absolute paths
 - Nested includes (included files can also include other files)
+- Remote file inclusion from various sources
+- Authentication for private repositories and servers
+- Configurable refresh policies
+- Environment variable substitution
 
 Variables defined in the main configuration file are available in all included files. Commands, stages, and sequences defined in included files can be referenced from the main file or other included files.
 

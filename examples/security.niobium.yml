@@ -1,0 +1,46 @@
+# Security configuration file for Niobium
+# This file contains security scanning configurations and can be included in other .niobium.yml files
+
+commands:
+  - name: security-scan
+    description: "Run security scanning"
+    command: |
+      echo "Running security scan..."
+      echo "::set-output name=SCAN_ID::$(date +%s)"
+    outputs:
+      SCAN_ID:
+  
+  - name: lint-code
+    description: "Lint the code for security issues"
+    command: echo "Linting code for security issues..."
+  
+  - name: dependency-check
+    description: "Check dependencies for vulnerabilities"
+    command: echo "Checking dependencies for vulnerabilities..."
+    depends_on: security-scan
+
+  - name: gitleaks
+    description: "Scan for secrets in code"
+    image: zricethezav/gitleaks
+    image_tag: latest
+    command: detect --no-git --source=/src -v --report-format=json --report-path=/output/gitleaks-report.json
+    output_file: gitleaks-report.json
+    volumes:
+      - source: .
+        target: /src
+      - source: ./.niobium_results
+        target: /output
+        readonly: false
+
+stages:
+  - name: security
+    description: "Run all security checks"
+    commands:
+      - security-scan
+      - lint-code
+      - dependency-check
+
+  - name: secret-scan
+    description: "Scan for exposed secrets in code"
+    commands:
+      - gitleaks 

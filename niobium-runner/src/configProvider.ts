@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { RemoteFileConfig, downloadRemoteFile, parseRemoteFile, getRemoteFilePath } from './utils/remoteFileUtils';
 
 export interface CommandConfig {
   name: string;
@@ -87,7 +88,23 @@ export interface NiobiumConfig {
   // New field for global variables
   variables?: Record<string, string>;
   // New field for including other config files
-  include?: string | string[];
+  include?: string | string[] | RemoteIncludeConfig | RemoteIncludeConfig[];
+}
+
+// New interface for remote includes
+export interface RemoteIncludeConfig {
+  url: string;
+  auth?: {
+    type: 'token' | 'basic' | 'oauth' | 'none';
+    token?: string;
+    username?: string;
+    password?: string;
+  };
+  headers?: Record<string, string>;
+  refresh?: {
+    interval?: number; // In minutes
+    force?: boolean;   // Force refresh even if file exists
+  };
 }
 
 // Storage for output variables to enable passing between commands
@@ -125,8 +142,16 @@ export class VariableManager {
   }
 }
 
+export interface ConfigLoadOptions {
+  forceRefreshRemoteIncludes?: boolean;
+}
+
 export class ConfigProvider {
   async loadConfig(workspaceRoot: string): Promise<NiobiumConfig | null> {
+    return this.loadConfigWithOptions(workspaceRoot, {});
+  }
+
+  async loadConfigWithOptions(workspaceRoot: string, options: ConfigLoadOptions = {}): Promise<NiobiumConfig | null> {
     try {
       const configFile = vscode.workspace.getConfiguration('niobium-runner').get<string>('configFile') || '.niobium.yml';
       const configPath = path.join(workspaceRoot, configFile);
@@ -144,6 +169,9 @@ export class ConfigProvider {
         return null;
       }
       
+      // Save force refresh option to be used during include processing
+      this._forceRefreshRemoteIncludes = options.forceRefreshRemoteIncludes || false;
+      
       // Process includes if present
       if (config.include) {
         await this.processIncludes(config, workspaceRoot, path.dirname(configPath));
@@ -157,12 +185,18 @@ export class ConfigProvider {
         }
       }
       
+      // Clear the force refresh flag after processing
+      this._forceRefreshRemoteIncludes = false;
+      
       return this.validateConfig(config);
     } catch (error) {
       vscode.window.showErrorMessage(`Error loading configuration: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
+
+  // Private property to track force refresh option
+  private _forceRefreshRemoteIncludes: boolean = false;
   
   private validateConfig(config: NiobiumConfig): NiobiumConfig {
     // Ensure all commands have required fields
@@ -330,25 +364,147 @@ export class ConfigProvider {
     });
   }
 
-  // Add new method to process included files
+  // Add a new method to process environment variables in strings
+  private processEnvVars(inputString: string): string {
+    if (!inputString || typeof inputString !== 'string') {
+      return inputString;
+    }
+
+    return inputString.replace(/\${([^}]+)}/g, (match, envVarName) => {
+      // Process inline variables from VariableManager
+      const variableManager = VariableManager.getInstance();
+      const varValue = variableManager.getVariable(envVarName);
+      if (varValue !== undefined) {
+        return varValue;
+      }
+
+      // Process environment variables
+      const envValue = process.env[envVarName];
+      return envValue !== undefined ? envValue : match;
+    });
+  }
+
+  // Update the processIncludes method to handle file refreshing
   private async processIncludes(config: NiobiumConfig, workspaceRoot: string, basePath: string): Promise<void> {
-    const includes = Array.isArray(config.include) ? config.include : [config.include as string];
+    // Normalize includes to array form
+    const includeItems = Array.isArray(config.include) 
+      ? config.include 
+      : (config.include ? [config.include] : []);
     
-    for (const includePath of includes) {
+    for (const includeItem of includeItems) {
       try {
-        // Resolve the include path relative to the base path
-        const fullPath = path.isAbsolute(includePath)
-          ? includePath
-          : path.resolve(basePath, includePath);
+        let fullPath: string;
+        let isRemote = false;
+        let shouldDownload = true;
         
-        // Check if file exists
-        if (!fs.existsSync(fullPath)) {
-          vscode.window.showWarningMessage(`Included configuration file not found: ${includePath}`);
-          continue;
+        // Check if this is a remote include
+        if (typeof includeItem === 'object' && includeItem.url) {
+          isRemote = true;
+          // This is a remote include
+          const remoteConfig = includeItem as RemoteIncludeConfig;
+          
+          // Process environment variables in URL and auth token
+          const processedUrl = this.processEnvVars(remoteConfig.url);
+          
+          // Process auth values if present
+          let processedAuth = remoteConfig.auth;
+          if (processedAuth) {
+            if (processedAuth.token) {
+              processedAuth = {
+                ...processedAuth,
+                token: this.processEnvVars(processedAuth.token)
+              };
+            }
+            
+            if (processedAuth.username) {
+              processedAuth = {
+                ...processedAuth,
+                username: this.processEnvVars(processedAuth.username)
+              };
+            }
+            
+            if (processedAuth.password) {
+              processedAuth = {
+                ...processedAuth,
+                password: this.processEnvVars(processedAuth.password)
+              };
+            }
+          }
+          
+          // Get the local path for this remote file
+          fullPath = getRemoteFilePath(processedUrl, workspaceRoot);
+          
+          // Check if we need to download the file
+          if (fs.existsSync(fullPath)) {
+            // File exists, check if refresh is needed
+            
+            // If global force refresh is enabled, always download
+            if (this._forceRefreshRemoteIncludes) {
+              shouldDownload = true;
+            } else if (remoteConfig.refresh) {
+              if (remoteConfig.refresh.force) {
+                // Force refresh requested in config
+                shouldDownload = true;
+              } else if (remoteConfig.refresh.interval) {
+                // Check file modification time
+                const stats = fs.statSync(fullPath);
+                const fileModTime = stats.mtime;
+                const currentTime = new Date();
+                const diffMinutes = (currentTime.getTime() - fileModTime.getTime()) / (1000 * 60);
+                
+                // Download if file is older than the refresh interval
+                shouldDownload = diffMinutes >= remoteConfig.refresh.interval;
+              } else {
+                // No interval specified, don't download
+                shouldDownload = false;
+              }
+            } else {
+              // No refresh options, don't download
+              shouldDownload = false;
+            }
+          }
+          
+          // Download the file if needed
+          if (shouldDownload) {
+            try {
+              // Download the remote file
+              await downloadRemoteFile(
+                parseRemoteFile(processedUrl, processedAuth),
+                fullPath
+              );
+              
+              vscode.window.showInformationMessage(`Successfully downloaded remote configuration from ${processedUrl}`);
+            } catch (downloadError) {
+              throw new Error(`Failed to download remote file from ${processedUrl}: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`);
+            }
+          } else {
+            vscode.window.showInformationMessage(`Using cached configuration from ${processedUrl}`);
+          }
+        } else if (typeof includeItem === 'string') {
+          // Local file include - also process env vars
+          const processedIncludePath = this.processEnvVars(includeItem);
+          
+          // Resolve the include path relative to the base path
+          fullPath = path.isAbsolute(processedIncludePath)
+            ? processedIncludePath
+            : path.resolve(basePath, processedIncludePath);
+          
+          // Check if file exists
+          if (!fs.existsSync(fullPath)) {
+            vscode.window.showWarningMessage(`Included configuration file not found: ${processedIncludePath}`);
+            continue;
+          }
+        } else {
+          throw new Error(`Invalid include item: ${JSON.stringify(includeItem)}`);
         }
         
+        // Read and parse the include file
         const includeContent = fs.readFileSync(fullPath, 'utf8');
         const includeConfig = yaml.load(includeContent) as Partial<NiobiumConfig>;
+        
+        if (!includeConfig) {
+          throw new Error(`Invalid YAML in included file: ${fullPath}`);
+        }
         
         // Merge configs
         if (includeConfig.commands) {
@@ -385,10 +541,12 @@ export class ConfigProvider {
             include: includeConfig.include
           };
           
-          await this.processIncludes(nestedConfig, workspaceRoot, path.dirname(fullPath));
+          await this.processIncludes(nestedConfig, workspaceRoot, isRemote ? workspaceRoot : path.dirname(fullPath));
         }
       } catch (error) {
-        vscode.window.showWarningMessage(`Error processing included file ${includePath}: ${error instanceof Error ? error.message : String(error)}`);
+        vscode.window.showWarningMessage(`Error processing included file ${
+          typeof includeItem === 'string' ? includeItem : (includeItem as RemoteIncludeConfig).url
+        }: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }

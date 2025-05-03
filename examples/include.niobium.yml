@@ -1,0 +1,145 @@
+# Niobium Configuration with Local and Remote Includes
+# This example demonstrates how to organize your configuration across multiple files
+# and include both local and remote configurations
+
+# Include local and remote configuration files
+include:
+  # Include local configuration files
+  - security.niobium.yml
+  - ./build/npm.niobium.yml
+  
+  # Include remote configuration files
+  - url: https://github.com/niobium/examples/blob/main/security-scans.yml
+    auth:
+      type: token
+      token: ${GITHUB_TOKEN}
+    refresh:
+      interval: 1440  # Refresh daily
+  
+  # Include configuration from custom server
+  - url: http://localhost:8000/remote-config.yml
+    refresh:
+      force: true  # Always refresh
+
+# Define global variables that can be used in all config files
+variables:
+  PROJECT_NAME: my-project
+  VERSION: 1.0.0
+  NODE_ENV: development
+  GITHUB_TOKEN: ${GITHUB_TOKEN}  # Reference environment variable
+
+# Commands defined in the main file
+commands:
+  - name: run-dev
+    description: "Start the development server"
+    command: npm run dev
+    env:
+      PORT: 3000
+  
+  - name: check-all
+    description: "Run all checks"
+    command: echo "Running all checks..."
+    depends_on:
+      - security-scan  # From security.niobium.yml
+      - lint-code      # From security.niobium.yml
+
+# Combined stage using commands from multiple files
+stages:
+  - name: validate
+    description: "Validate the project"
+    commands:
+      - security-scan     # From security.niobium.yml
+      - lint-code         # From security.niobium.yml
+      - npm-test          # From build/npm.niobium.yml
+  
+  - name: build-and-deploy
+    description: "Build and deploy"
+    commands:
+      - npm-install       # From build/npm.niobium.yml
+      - npm-build         # From build/npm.niobium.yml
+      - name: deploy
+        description: "Deploy to production"
+        command: echo "Deploying ${PROJECT_NAME} version ${VERSION}"
+        depends_on: npm-build
+      - run-trivy         # From remote security-scans.yml
+
+# Sequence that combines stages from different files
+sequences:
+  - name: ci-pipeline
+    description: "Complete CI pipeline"
+    stages:
+      - validate
+      - security           # From security.niobium.yml
+      - build              # From build/npm.niobium.yml
+      - security-scans     # From remote security-scans.yml
+      - build-and-deploy
+  
+  - name: security-check
+    description: "Run security checks only"
+    stages:
+      - security           # From security.niobium.yml
+      - security-scans     # From remote security-scans.yml
+
+# ----- Example of referenced security.niobium.yml -----
+# commands:
+#   - name: security-scan
+#     description: "Run security scanning"
+#     command: |
+#       echo "Running security scan..."
+#       echo "::set-output name=SCAN_ID::$(date +%s)"
+#     outputs:
+#       SCAN_ID:
+#   
+#   - name: lint-code
+#     description: "Lint the code for security issues"
+#     command: echo "Linting code for security issues..."
+# 
+# stages:
+#   - name: security
+#     description: "Run all security checks"
+#     commands:
+#       - security-scan
+#       - lint-code
+
+# ----- Example of referenced build/npm.niobium.yml -----
+# commands:
+#   - name: npm-install
+#     description: "Install npm dependencies"
+#     command: npm install
+#   
+#   - name: npm-test
+#     description: "Run tests"
+#     command: npm test
+#     depends_on: npm-install
+#   
+#   - name: npm-build
+#     description: "Build the project"
+#     command: npm run build
+#     env:
+#       NODE_ENV: production
+# 
+# stages:
+#   - name: build
+#     description: "Build the npm project"
+#     commands:
+#       - npm-install
+#       - npm-test
+#       - npm-build
+
+# ----- Example of referenced remote security-scans.yml -----
+# commands:
+#   - name: run-trivy
+#     description: "Run Trivy container scanner"
+#     image: aquasec/trivy
+#     command: filesystem --format json -o /output/results.json /src
+#     volumes:
+#       - source: .
+#         target: /src
+#       - source: ./results
+#         target: /output
+# 
+# stages:
+#   - name: security-scans
+#     description: "Run container security scans"
+#     commands:
+#       - run-trivy 
