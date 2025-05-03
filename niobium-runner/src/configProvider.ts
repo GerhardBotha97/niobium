@@ -37,6 +37,7 @@ export interface StageConfig {
   watch?: {
     patterns: string[];
     debounce?: number;
+    pre_commit?: boolean;
   };
 }
 

@@ -343,6 +343,11 @@
         "icon": "$(settings-gear)"
       },
       {
+        "command": "niobium-runner.manageGitHooks",
+        "title": "Niobium: Manage Git Hooks",
+        "icon": "$(git-commit)"
+      },
+      {
         "command": "niobium-runner.toggleAutoShowPanel",
         "title": "Niobium: Toggle Auto-Show Runner Panel"
       },
@@ -486,6 +491,16 @@
           "type": "boolean",
           "default": true,
           "description": "Show notifications when a file watcher triggers a stage run"
+        },
+        "niobium-runner.gitHooks.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Git hooks integration"
+        },
+        "niobium-runner.gitHooks.installPreCommit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Install pre-commit hook to run watchers marked with pre_commit: true"
         },
         "niobium-runner.autoShowRunnerPanel": {
           "type": "boolean",

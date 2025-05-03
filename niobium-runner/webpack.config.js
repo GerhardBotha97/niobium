@@ -5,12 +5,15 @@ const CopyPlugin = require('copy-webpack-plugin');
  * @type {import('webpack').Configuration}
  */
 module.exports = {
-  entry: './src/extension.ts',
+  entry: {
+    extension: './src/extension.ts',
+    preCommitRunner: './src/preCommitRunner.ts',
+  },
   target: 'node',
   mode: 'none',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'extension.js',
+    filename: '[name].js',
     libraryTarget: 'commonjs2'
   },
   devtool: 'source-map',

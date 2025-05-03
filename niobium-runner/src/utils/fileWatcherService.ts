@@ -471,4 +471,51 @@ export class FileWatcherService {
       vscode.window.showInformationMessage(`File watcher for stage "${stageId}" enabled`);
     }
   }
+
+  /**
+   * Check if files match the specified patterns
+   * @param files List of file paths to check
+   * @param patterns List of glob patterns to match against
+   * @param workspaceRoot The workspace root path
+   * @returns List of matched file paths
+   */
+  public getMatchingFiles(files: string[], patterns: string[], workspaceRoot: string): string[] {
+    if (!files.length || !patterns.length) {
+      return [];
+    }
+
+    const matchedFiles: string[] = [];
+    
+    for (const file of files) {
+      // Make the file path relative to workspace root for consistent matching
+      const relativePath = this.makeRelativePath(file, workspaceRoot);
+      
+      if (this.matchesPatterns(relativePath, patterns)) {
+        matchedFiles.push(file);
+      }
+    }
+    
+    return matchedFiles;
+  }
+
+  /**
+   * Make a file path relative to the workspace root
+   * @param filePath File path to make relative
+   * @param workspaceRoot The workspace root path
+   * @returns Relative file path
+   */
+  private makeRelativePath(filePath: string, workspaceRoot: string): string {
+    // Check if the path is already relative
+    if (!path.isAbsolute(filePath)) {
+      return filePath;
+    }
+    
+    // Make the path relative to the workspace root
+    let relativePath = path.relative(workspaceRoot, filePath);
+    
+    // Convert backslashes to forward slashes for consistency
+    relativePath = relativePath.replace(/\\/g, '/');
+    
+    return relativePath;
+  }
 } 

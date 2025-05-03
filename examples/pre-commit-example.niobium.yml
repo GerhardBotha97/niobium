@@ -1,0 +1,59 @@
+# Niobium configuration with pre-commit hooks example
+
+commands:
+  - name: Lint JavaScript
+    description: Run ESLint on JavaScript files
+    command: eslint --fix src/
+
+  - name: Lint TypeScript
+    description: Run TypeScript compiler for checking errors
+    command: tsc --noEmit
+    
+  - name: Format Code
+    description: Run Prettier on code files
+    command: prettier --write src/
+    
+  - name: Run Tests
+    description: Run unit tests
+    command: jest
+
+stages:
+  - name: Code Quality Check
+    description: Check code quality before commits
+    commands:
+      - Lint JavaScript
+      - Lint TypeScript
+    # This stage will run when files matching the patterns change
+    # AND when a git commit is being made (pre-commit check)
+    watch:
+      patterns:
+        - "src/**/*.js"
+        - "src/**/*.ts"
+        - "!src/**/*.test.js"  # Ignore test files
+        - "!src/**/*.test.ts"  # Ignore test files
+      debounce: 300
+      pre_commit: true  # This makes the watcher run during pre-commit
+
+  - name: Format
+    description: Format code on save
+    commands:
+      - Format Code
+    # This stage will run when files matching the patterns change
+    # But NOT during pre-commit
+    watch:
+      patterns:
+        - "src/**/*.js"
+        - "src/**/*.ts"
+        - "src/**/*.json"
+      debounce: 200
+
+  - name: Test
+    description: Run tests when test files change
+    commands:
+      - Run Tests
+    watch:
+      patterns:
+        - "src/**/*.test.js"
+        - "src/**/*.test.ts"
+      debounce: 500
+      pre_commit: true  # Also run tests during pre-commit 

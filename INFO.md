@@ -1235,3 +1235,294 @@ Niobium integrates with several popular development tools and technologies out o
 - **Apache**: Web server container management
 
 To use these integrations, reference them in your commands or define containers using the appropriate images and configuration settings as shown in the examples.
+
+## File Watchers
+
+File watchers allow you to automatically run stages when specific files change. This is useful for tasks like:
+
+- Running tests when test files change
+- Linting code when source files change
+- Rebuilding documentation when documentation files change
+
+To configure a file watcher, add a `watch` property to a stage:
+
+```yaml
+stages:
+  - name: Test
+    description: Run tests when test files change
+    commands:
+      - Run Tests
+    watch:
+      patterns:
+        - "src/**/*.test.js"
+        - "src/**/*.test.ts"
+      debounce: 500  # Optional: delay in milliseconds before running the stage
+```
+
+The `patterns` property is an array of glob patterns to match against file paths. You can use negated patterns (prefixed with `!`) to exclude files.
+
+## Pre-Commit Hooks
+
+Niobium supports Git pre-commit hooks to ensure code quality when committing changes. This allows you to:
+
+- Run linters before committing code
+- Run tests to ensure they pass
+- Enforce code style and formatting standards
+- Prevent commits with issues from entering your repository
+
+### Configuring Pre-Commit Hooks
+
+To configure a pre-commit hook, add a `pre_commit: true` property to a stage's `watch` configuration:
+
+```yaml
+stages:
+  - name: Code Quality Check
+    description: Check code quality before commits
+    commands:
+      - Lint JavaScript
+    watch:
+      patterns:
+        - "src/**/*.js"
+      pre_commit: true  # This makes the watcher run during pre-commit
+```
+
+When you make a commit, the pre-commit hook will:
+
+1. Identify staged files that match the watcher patterns
+2. Run the stage if there are matching files
+3. Abort the commit if the stage fails (unless `allow_failure: true` is set)
+
+Pre-commit hooks are automatically installed when you open a workspace with pre-commit watchers configured. You can also manage them through the `Niobium: Manage Git Hooks` command.
+
+### How Pre-Commit Hooks Work
+
+The pre-commit functionality works by:
+
+1. Installing a Git pre-commit hook script in your repository's `.git/hooks` directory
+2. When you run `git commit`, the hook executes before the commit is created
+3. The hook identifies which files are staged for commit
+4. Niobium runs any stages marked with `pre_commit: true` that have patterns matching the staged files
+5. If any stage fails, the commit is aborted with an error message
+6. If all stages pass, the commit proceeds normally
+
+### Pre-Commit Settings
+
+Configure Git hook behavior through VS Code settings:
+
+- `niobium-runner.gitHooks.enabled`: Enable or disable Git hooks integration (default: true)
+- `niobium-runner.gitHooks.installPreCommit`: Install the pre-commit hook automatically (default: true)
+
+### Pre-Commit Hook Examples
+
+#### Basic Linting Example
+
+```yaml
+commands:
+  - name: ESLint Check
+    description: Run ESLint on JavaScript files
+    command: eslint src/ --ext .js,.jsx
+
+stages:
+  - name: Lint
+    description: Check code quality before commits
+    commands:
+      - ESLint Check
+    watch:
+      patterns:
+        - "src/**/*.js"
+        - "src/**/*.jsx"
+      pre_commit: true
+```
+
+#### Comprehensive Pre-Commit Validation
+
+Here's a complete example combining multiple validation stages:
+
+```yaml
+commands:
+  - name: Lint JavaScript
+    description: Run ESLint on JavaScript files
+    command: eslint --fix src/
+
+  - name: Lint TypeScript
+    description: Run TypeScript compiler for checking errors
+    command: tsc --noEmit
+    
+  - name: Format Code
+    description: Run Prettier on code files
+    command: prettier --write src/
+    
+  - name: Run Tests
+    description: Run unit tests
+    command: jest
+
+stages:
+  - name: Code Quality Check
+    description: Check code quality before commits
+    commands:
+      - Lint JavaScript
+      - Lint TypeScript
+    # This stage will run when files matching the patterns change
+    # AND when a git commit is being made (pre-commit check)
+    watch:
+      patterns:
+        - "src/**/*.js"
+        - "src/**/*.ts"
+        - "!src/**/*.test.js"  # Ignore test files
+        - "!src/**/*.test.ts"  # Ignore test files
+      debounce: 300
+      pre_commit: true  # This makes the watcher run during pre-commit
+
+  - name: Format
+    description: Format code on save
+    commands:
+      - Format Code
+    # This stage will run when files matching the patterns change
+    # But NOT during pre-commit
+    watch:
+      patterns:
+        - "src/**/*.js"
+        - "src/**/*.ts"
+        - "src/**/*.json"
+      debounce: 200
+
+  - name: Test
+    description: Run tests when test files change
+    commands:
+      - Run Tests
+    watch:
+      patterns:
+        - "src/**/*.test.js"
+        - "src/**/*.test.ts"
+      debounce: 500
+      pre_commit: true  # Also run tests during pre-commit
+```
+
+#### Security Scanning Pre-Commit Example
+
+```yaml
+commands:
+  - name: Secret Scan
+    description: Check for secrets and credentials
+    command: gitleaks detect -v --source . --report-path report.json
+    allow_failure: false
+
+  - name: Security Audit
+    description: Run npm security audit
+    command: npm audit
+    allow_failure: true  # Allow audit warnings but still show them
+
+stages:
+  - name: Security Check
+    description: Run security checks before commit
+    commands:
+      - Secret Scan
+      - Security Audit
+    watch:
+      patterns:
+        - "**/*.js"
+        - "**/*.ts"
+        - "**/*.json"
+        - "**/*.yml"
+        - "**/*.yaml"
+      pre_commit: true
+```
+
+### Managing Pre-Commit Hooks
+
+You can manage Git hooks through VS Code commands:
+
+1. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
+2. Type "Niobium: Manage Git Hooks"
+3. Select from options:
+   - Install Pre-Commit Hook
+   - Uninstall Pre-Commit Hook
+   - Enable Git Hooks
+   - Disable Git Hooks
+
+### Pre-Commit Best Practices
+
+- **Keep Hooks Fast**: Pre-commit hooks should run quickly to avoid slowing down your workflow
+- **Focus on Critical Checks**: Include only the most important checks in pre-commit hooks
+- **Use `allow_failure` Selectively**: For non-critical checks, use `allow_failure: true` to show warnings without blocking commits
+- **Exclude Test and Build Files**: Use negative patterns (`!pattern`) to exclude files that don't need pre-commit validation
+- **Combine with File Watchers**: Use the same stage for both pre-commit checks and file watching to maintain consistency
+
+### Bypassing Pre-Commit Hooks
+
+In emergency situations, you can bypass the pre-commit hook using Git's `--no-verify` flag:
+
+```bash
+git commit -m "Emergency fix" --no-verify
+```
+
+However, it's generally recommended to fix issues flagged by pre-commit hooks rather than bypassing them.
+
+### Troubleshooting Pre-Commit Hooks
+
+If you're having issues with pre-commit hooks not running, follow these steps to verify and fix your setup:
+
+#### Verifying Hook Installation
+
+To check if the pre-commit hook is properly installed:
+
+1. Navigate to your repository's `.git/hooks` directory:
+   ```bash
+   cd .git/hooks
+   ```
+
+2. Check if the pre-commit file exists and is executable:
+   ```bash
+   ls -la pre-commit
+   ```
+   
+   You should see output like:
+   ```
+   -rwxr-xr-x 1 user group 1234 Jan 1 12:00 pre-commit
+   ```
+   
+   The `x` flags indicate the file is executable.
+
+#### Fixing Missing Hooks Directory or Executable
+
+If the `.git/hooks` directory doesn't exist:
+
+1. Make sure you're in a valid Git repository:
+   ```bash
+   git status
+   ```
+   If this returns an error, you need to initialize Git first: `git init`
+
+2. Manually create the hooks directory:
+   ```bash
+   mkdir -p .git/hooks
+   ```
+
+If the pre-commit executable is missing or not running:
+
+1. Manually install using the Niobium command:
+   - Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
+   - Type "Niobium: Manage Git Hooks"
+   - Select "Install Pre-Commit Hook"
+
+2. Make the hook executable if it exists but isn't running:
+   ```bash
+   chmod +x .git/hooks/pre-commit
+   ```
+
+3. If the hook still isn't created automatically:
+   - Check that you have at least one stage with `pre_commit: true` in your config
+   - Verify your `.niobium.yml` file is valid
+   - Check that Git hooks are enabled in VS Code settings
+   - Try closing and reopening VS Code
+
+#### Testing Your Hook
+
+To test if your pre-commit hook is working correctly:
+
+1. Make a small change to a file that matches your watch patterns
+2. Stage the change: `git add <filename>`
+3. Try to commit: `git commit -m "Testing pre-commit hook"`
+4. You should see Niobium running the configured stages
+
+If the hook doesn't run, check the VS Code output panel for any error messages from Niobium.

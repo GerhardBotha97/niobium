@@ -10,19 +10,29 @@ export class FileWatcherItem extends vscode.TreeItem {
     public readonly description: string,
     public readonly enabled: boolean,
     public readonly patterns: string[],
-    public readonly debounceTime: number
+    public readonly debounceTime: number,
+    public readonly isPreCommit: boolean = false
   ) {
     super(
       stageName,
       vscode.TreeItemCollapsibleState.Collapsed
     );
 
-    this.tooltip = `${description || stageName}\nEnabled: ${enabled ? 'Yes' : 'No'}\nDebounce: ${debounceTime}ms`;
-    this.contextValue = enabled ? 'enabledWatcher' : 'disabledWatcher';
-    this.iconPath = new vscode.ThemeIcon(enabled ? 'eye' : 'eye-closed');
+    this.tooltip = `${description || stageName}\nEnabled: ${enabled ? 'Yes' : 'No'}\nDebounce: ${debounceTime}ms\nPre-Commit: ${isPreCommit ? 'Yes' : 'No'}`;
+    this.contextValue = enabled ? 
+      (isPreCommit ? 'enabledPreCommitWatcher' : 'enabledWatcher') : 
+      (isPreCommit ? 'disabledPreCommitWatcher' : 'disabledWatcher');
+    
+    // Use a git icon for pre-commit watchers, regular eye icon for normal watchers
+    const iconName = isPreCommit ? 
+      (enabled ? 'git-commit' : 'circle-slash') : 
+      (enabled ? 'eye' : 'eye-closed');
+    this.iconPath = new vscode.ThemeIcon(iconName);
 
     // Add metadata
-    this.description = description || (enabled ? 'Enabled' : 'Disabled');
+    this.description = description || (enabled ? 
+      (isPreCommit ? 'Pre-Commit' : 'Enabled') : 
+      (isPreCommit ? 'Pre-Commit (Disabled)' : 'Disabled'));
   }
 }
 
@@ -111,7 +121,8 @@ export class FileWatcherViewProvider implements vscode.TreeDataProvider<FileWatc
           watcher.config.stageConfig.description || '',
           watcher.config.enabled,
           watcher.config.patterns,
-          watcher.config.debounce
+          watcher.config.debounce,
+          watcher.config.stageConfig.watch?.pre_commit || false
         );
         
         // Create pattern items

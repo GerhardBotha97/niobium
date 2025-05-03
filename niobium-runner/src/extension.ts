@@ -13,6 +13,7 @@ import { registerFileWatcherView } from './views/fileWatcherView';
 import { KeyboardShortcutsManager } from './utils/keyboardShortcutsManager';
 import { CustomPanel } from './ui/customPanel';
 import { registerResultsTreeView } from './views/resultsTreeView';
+import { GitHookService } from './utils/gitHookService';
 
 // Function to log keyboard shortcuts information
 function logKeyboardShortcutsInfo(context: vscode.ExtensionContext) {
@@ -50,6 +51,8 @@ export function activate(context: vscode.ExtensionContext) {
   const configProvider = new ConfigProvider();
   const commandRunner = new CommandRunner(context);
   const dockerRunner = new DockerRunner(context);
+  const fileWatcherService = FileWatcherService.getInstance(context);
+  const gitHookService = GitHookService.getInstance(context);
   
   // Initialize the ignore provider
   const ignoreProvider = IgnoreProvider.getInstance();
@@ -91,7 +94,10 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(toggleResultsPanel);
   
   // Initialize file watcher service
-  const fileWatcherService = FileWatcherService.getInstance(context);
+  fileWatcherService.initialize();
+  
+  // Initialize git hook service
+  gitHookService.initialize();
   
   // Register file watcher view
   registerFileWatcherView(context);
@@ -924,6 +930,63 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   
+  // Register command to manage Git hooks
+  const manageGitHooks = vscode.commands.registerCommand('niobium-runner.manageGitHooks', async () => {
+    const items = [
+      {
+        label: 'Install Pre-Commit Hook',
+        description: 'Install/reinstall the pre-commit hook for this repository',
+        action: 'install'
+      },
+      {
+        label: 'Uninstall Pre-Commit Hook',
+        description: 'Remove the pre-commit hook from this repository',
+        action: 'uninstall'
+      },
+      {
+        label: 'Enable Git Hooks',
+        description: 'Enable Git hooks in settings',
+        action: 'enable'
+      },
+      {
+        label: 'Disable Git Hooks',
+        description: 'Disable Git hooks in settings',
+        action: 'disable'
+      }
+    ];
+
+    const selectedItem = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select a Git hook action'
+    });
+
+    if (!selectedItem) {
+      return;
+    }
+
+    switch (selectedItem.action) {
+      case 'install':
+        // Install pre-commit hook
+        await gitHookService.initialize();
+        vscode.window.showInformationMessage('Pre-commit hook installed successfully');
+        break;
+      case 'uninstall':
+        // Uninstall pre-commit hook
+        await gitHookService.uninstallPreCommitHook();
+        vscode.window.showInformationMessage('Pre-commit hook removed successfully');
+        break;
+      case 'enable':
+        // Enable Git hooks
+        await vscode.workspace.getConfiguration('niobium-runner').update('gitHooks.enabled', true, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage('Git hooks enabled successfully');
+        break;
+      case 'disable':
+        // Disable Git hooks
+        await vscode.workspace.getConfiguration('niobium-runner').update('gitHooks.enabled', false, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage('Git hooks disabled successfully');
+        break;
+    }
+  });
+  
   context.subscriptions.push(
     statusBarItem,
     showDashboard,
@@ -953,7 +1016,8 @@ export function activate(context: vscode.ExtensionContext) {
     toggleResultsPanel,
     refreshResults,
     focusOnResultsView,
-    refreshRemoteConfigs
+    refreshRemoteConfigs,
+    manageGitHooks
   );
 }
 
