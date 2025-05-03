@@ -346,6 +346,11 @@ export class DashboardPanel {
 
   // Generate the HTML for the webview
   private _getHtmlForWebview(): string {
+    // Get the URI for the wasp-icon.svg
+    const waspIconUri = this._panel.webview.asWebviewUri(
+      vscode.Uri.file(path.join(DashboardPanel._context.extensionPath, 'media', 'wasp-icon.svg'))
+    );
+    
     // Generate recent activities HTML
     let activitiesHtml = '';
     if (DashboardPanel._recentActivities.length === 0) {
@@ -417,7 +422,7 @@ export class DashboardPanel {
             justify-content: center;
           }
           
-          .logo-wasp svg {
+          .logo-wasp img {
             width: 100%;
             height: 100%;
           }
@@ -569,7 +574,7 @@ export class DashboardPanel {
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #3794ff, #45aaf2);
+            background: linear-gradient(135deg, #7F8C8D, #5D6D7E);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -581,6 +586,7 @@ export class DashboardPanel {
           
           .wasp-badge:hover {
             transform: scale(1.1);
+            background: linear-gradient(135deg, #5D6D7E, #2C3E50);
           }
           
           @keyframes pulse {
@@ -598,12 +604,7 @@ export class DashboardPanel {
         <div class="dashboard">
           <div class="header">
             <div class="logo-wasp">
-              <svg width="36" height="36" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 2C7.2 2 6.5 2.5 6.5 3C6.5 3.5 7 4 8 4C9 4 9.5 3.5 9.5 3C9.5 2.5 8.8 2 8 2Z" fill="#3794FF"/>
-                <path d="M12 5C11.5 4.8 10.5 5.2 10 6L8 5.5L6 6C5.5 5.2 4.5 4.8 4 5C3.5 5.2 3.2 6 3.5 7C3.8 8 4.2 8.2 5 8.5L6 13H10L11 8.5C11.8 8.2 12.2 8 12.5 7C12.8 6 12.5 5.2 12 5Z" fill="#3794FF"/>
-                <path d="M4 9.5L2 10.5L1 12L2 13L4 12.5" stroke="#3794FF" stroke-width="0.8"/>
-                <path d="M12 9.5L14 10.5L15 12L14 13L12 12.5" stroke="#3794FF" stroke-width="0.8"/>
-              </svg>
+              <img src="${waspIconUri}" alt="Niobium Wasp Icon" />
             </div>
             <div>
               <div class="title">Niobium Dashboard</div>
@@ -653,12 +654,7 @@ export class DashboardPanel {
         </div>
         
         <div class="wasp-badge pulse" title="Quick access to Niobium actions">
-          <svg width="24" height="24" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 2C7.2 2 6.5 2.5 6.5 3C6.5 3.5 7 4 8 4C9 4 9.5 3.5 9.5 3C9.5 2.5 8.8 2 8 2Z" fill="white"/>
-            <path d="M12 5C11.5 4.8 10.5 5.2 10 6L8 5.5L6 6C5.5 5.2 4.5 4.8 4 5C3.5 5.2 3.2 6 3.5 7C3.8 8 4.2 8.2 5 8.5L6 13H10L11 8.5C11.8 8.2 12.2 8 12.5 7C12.8 6 12.5 5.2 12 5Z" fill="white"/>
-            <path d="M4 9.5L2 10.5L1 12L2 13L4 12.5" stroke="white" stroke-width="0.8"/>
-            <path d="M12 9.5L14 10.5L15 12L14 13L12 12.5" stroke="white" stroke-width="0.8"/>
-          </svg>
+          <img src="${waspIconUri}" alt="Niobium Wasp Icon" width="24" height="24" />
         </div>
 
         <script>

@@ -194,9 +194,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Create and configure status bar item
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   
-  // Use VS Code's built-in codicon with a better icon for a wasp (insect-like or flying)
-  // Options: $(rocket), $(shield), $(zap), $(lightbulb), $(star)
-  statusBarItem.text = "$(zap) Niobium";
+  // Use our custom Niobium icon instead of zap
+  statusBarItem.text = "Niobium";
   statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   statusBarItem.tooltip = "Open Niobium Dashboard";
   statusBarItem.command = 'niobium-runner.showDashboard';

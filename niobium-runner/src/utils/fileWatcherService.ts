@@ -31,7 +31,7 @@ export class FileWatcherService {
     
     // Initialize status bar item
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-    this.statusBarItem.text = "$(eye) Niobium: Watch Off";
+    this.statusBarItem.text = "Niobium: Watch Off";
     this.statusBarItem.tooltip = "No file watchers active";
     this.statusBarItem.command = 'niobium-runner.manageFileWatchers';
     this.context.subscriptions.push(this.statusBarItem);
@@ -438,11 +438,11 @@ export class FileWatcherService {
     }
     
     if (this.activeWatchCount > 0) {
-      this.statusBarItem.text = `$(eye) Niobium: ${this.activeWatchCount} Watch${this.activeWatchCount > 1 ? 'es' : ''}`;
+      this.statusBarItem.text = `Niobium: ${this.activeWatchCount} Watch${this.activeWatchCount > 1 ? 'es' : ''}`;
       this.statusBarItem.tooltip = `${this.activeWatchCount} file watcher${this.activeWatchCount > 1 ? 's' : ''} active`;
       this.statusBarItem.show();
     } else if (this.watchers.size > 0) {
-      this.statusBarItem.text = "$(eye-closed) Niobium: Watch Off";
+      this.statusBarItem.text = "Niobium: Watch Off";
       this.statusBarItem.tooltip = "File watchers disabled";
       this.statusBarItem.show();
     } else {
