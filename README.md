@@ -2,7 +2,7 @@
   <img src="static/niobium_logo.png" alt="Niobium Runner Logo" width="200"/>
 </p>
 
-<h1 align="center">Niobium Runner</h1>
+<h1 align="center">Niobium</h1>
 
 <p align="center">
   A powerful, flexible VS Code extension for configurable command running with advanced workflows
