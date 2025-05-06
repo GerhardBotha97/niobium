@@ -167,6 +167,13 @@ export class CommandRunner {
       const baseFilename = path.basename(sanitizedOutputFilename);
       const outputFilePath = path.join(resultsDir, baseFilename);
       
+      // Check if this output file path should be ignored based on .niobiumignore patterns
+      const relativeOutputPath = path.relative(workspaceRoot, outputFilePath);
+      if (this.shouldIgnorePath(relativeOutputPath, workspaceRoot)) {
+        this.outputChannel.appendLine(`\n[WARNING] Output file "${relativeOutputPath}" matches an ignore pattern in .niobiumignore. Skipping file creation.`);
+        return;
+      }
+      
       // For JSON files, try to extract and prettify the JSON
       if (baseFilename.endsWith('.json')) {
         try {
@@ -1136,25 +1143,36 @@ export class CommandRunner {
         const outputFiles: string[] = [];
         this.listFilesRecursively(resultsDir, outputFiles);
         
+        // Filter output files based on ignore patterns - this is redundant since listFilesRecursively already
+        // filters files, but an extra check doesn't hurt as a safety measure
+        const filteredOutputFiles = outputFiles.filter(file => !this.shouldIgnorePath(file, workspaceRoot));
+        
         // If we have output files, log them
-        if (outputFiles.length > 0) {
+        if (filteredOutputFiles.length > 0) {
           this.outputChannel.appendLine(`\n[FILES] Output files in .niobium_results directory:`);
-          outputFiles.forEach(file => {
+          filteredOutputFiles.forEach(file => {
             this.outputChannel.appendLine(`- ${file}`);
           });
         } else if (command.output_file) {
           // If no files were found but an output file was specified, try to create it from logs
           // Keep original path structure but ensure the directory exists
           const outputPath = path.join(resultsDir, processedOutputFile);
-          const outputDir = path.dirname(outputPath);
+          const relativeOutputPath = path.relative(workspaceRoot, outputPath);
           
-          if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
+          // Check if this output file path should be ignored based on .niobiumignore patterns
+          if (this.shouldIgnorePath(relativeOutputPath, workspaceRoot)) {
+            this.outputChannel.appendLine(`\n[WARNING] Output file "${relativeOutputPath}" matches an ignore pattern in .niobiumignore. Skipping file creation.`);
+          } else {
+            const outputDir = path.dirname(outputPath);
+            
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+            }
+            
+            // Simply save the raw logs to the file
+            fs.writeFileSync(outputPath, logs);
+            this.outputChannel.appendLine(`\n[INFO] Container did not create output files. Saving logs to: ${outputPath}`);
           }
-          
-          // Simply save the raw logs to the file
-          fs.writeFileSync(outputPath, logs);
-          this.outputChannel.appendLine(`\n[INFO] Container did not create output files. Saving logs to: ${outputPath}`);
         }
         
         if (jobId) {
@@ -1637,11 +1655,17 @@ export class CommandRunner {
     
     files.forEach(file => {
       const filePath = path.join(dir, file);
+      const relPath = path.relative(currentBaseDir, filePath);
+      
+      // Skip files that match ignore patterns
+      if (this.shouldIgnorePath(relPath, currentBaseDir)) {
+        return;
+      }
+      
       if (fs.statSync(filePath).isDirectory()) {
         this.listFilesRecursively(filePath, fileList, currentBaseDir);
       } else {
-        // Get path relative to base directory
-        const relPath = path.relative(currentBaseDir, filePath);
+        // Add the file to the list if it's not ignored
         fileList.push(relPath);
       }
     });

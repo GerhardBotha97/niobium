@@ -69,6 +69,16 @@ export class DockerRunner {
   }
 
   /**
+   * Filter files by ignore pattern
+   * @param files Array of file paths
+   * @param workspaceRoot Workspace root path
+   * @returns Filtered array of file paths
+   */
+  private filterFilesByIgnorePattern(files: string[], workspaceRoot: string): string[] {
+    return files.filter(file => !this.shouldIgnorePath(file, workspaceRoot));
+  }
+
+  /**
    * Start a Docker container based on the provided configuration
    */
   async startContainer(container: DockerContainerConfig, workspaceRoot: string): Promise<DockerExecutionResult> {
@@ -126,289 +136,262 @@ export class DockerRunner {
       }
     }
 
-    try {
-      // Check if the container is already running
-      const existingContainer = await this.findContainer(container.name);
-      if (existingContainer) {
-        const info = await existingContainer.inspect();
-        if (info.State.Running) {
-          const message = `Container ${container.name} is already running`;
-          this.outputChannel.appendLine(`[WARNING] ${message}`);
+    // Check if the container is already running
+    const existingContainer = await this.findContainer(container.name);
+    if (existingContainer) {
+      const info = await existingContainer.inspect();
+      if (info.State.Running) {
+        const message = `Container ${container.name} is already running`;
+        this.outputChannel.appendLine(`[WARNING] ${message}`);
+        
+        if (jobId) {
+          this.jobOutputService.appendOutput(jobId, message);
+          this.jobOutputService.completeJobSuccess(jobId);
+        }
+        
+        return {
+          success: true,
+          output: message,
+          containerId: info.Id
+        };
+      } else {
+        // Remove stopped container if requested
+        if (container.remove_when_stopped) {
+          await existingContainer.remove();
+          this.outputChannel.appendLine(`Removed stopped container: ${container.name}`);
+        } else {
+          // Start existing container
+          await existingContainer.start();
+          const message = `Started existing container: ${container.name}`;
+          this.outputChannel.appendLine(message);
           
           if (jobId) {
             this.jobOutputService.appendOutput(jobId, message);
             this.jobOutputService.completeJobSuccess(jobId);
           }
           
+          this.runningContainers.set(container.name, existingContainer);
+          
           return {
             success: true,
             output: message,
             containerId: info.Id
           };
-        } else {
-          // Remove stopped container if requested
-          if (container.remove_when_stopped) {
-            await existingContainer.remove();
-            this.outputChannel.appendLine(`Removed stopped container: ${container.name}`);
-          } else {
-            // Start existing container
-            await existingContainer.start();
-            const message = `Started existing container: ${container.name}`;
-            this.outputChannel.appendLine(message);
-            
-            if (jobId) {
-              this.jobOutputService.appendOutput(jobId, message);
-              this.jobOutputService.completeJobSuccess(jobId);
-            }
-            
-            this.runningContainers.set(container.name, existingContainer);
-            
-            return {
-              success: true,
-              output: message,
-              containerId: info.Id
-            };
-          }
         }
       }
+    }
 
-      // Prepare container create options
-      const imageName = `${container.image}${container.tag ? `:${container.tag}` : ''}`;
-      
-      // Parse volumes
-      const volumes: { [key: string]: {} } = {};
-      const binds: string[] = [];
-      
-      if (container.volumes) {
-        for (const vol of container.volumes) {
-          const source = vol.source.startsWith('/') ? vol.source : `${workspaceRoot}/${vol.source}`;
-          
-          // Skip volumes that match ignore patterns
-          if (this.shouldIgnorePath(source, workspaceRoot)) {
-            this.outputChannel.appendLine(`[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern in .niobiumignore`);
-            if (jobId) {
-              this.jobOutputService.appendOutput(jobId, `[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern\n`);
-            }
-            continue;
+    // Prepare container create options
+    const imageName = `${container.image}${container.tag ? `:${container.tag}` : ''}`;
+    
+    // Parse volumes
+    const volumes: { [key: string]: {} } = {};
+    const binds: string[] = [];
+    
+    if (container.volumes) {
+      for (const vol of container.volumes) {
+        const source = vol.source.startsWith('/') ? vol.source : `${workspaceRoot}/${vol.source}`;
+        
+        // Skip volumes that match ignore patterns
+        if (this.shouldIgnorePath(source, workspaceRoot)) {
+          this.outputChannel.appendLine(`[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern in .niobiumignore`);
+          if (jobId) {
+            this.jobOutputService.appendOutput(jobId, `[WARNING] Skipping volume "${vol.source}" as it matches an ignore pattern\n`);
           }
-          
-          const mode = vol.readonly ? 'ro' : 'rw';
-          binds.push(`${source}:${vol.target}:${mode}`);
-          volumes[vol.target] = {};
-        }
-      }
-      
-      // Parse ports
-      const exposedPorts: { [key: string]: {} } = {};
-      const portBindings: Dockerode.PortMap = {};
-      
-      if (container.ports) {
-        for (const port of container.ports) {
-          const containerPort = typeof port.container === 'number' ? `${port.container}/tcp` : port.container;
-          exposedPorts[containerPort] = {};
-          
-          const hostBinding = {
-            HostPort: typeof port.host === 'number' ? `${port.host}` : port.host
-          };
-          
-          portBindings[containerPort] = [hostBinding];
-        }
-      }
-      
-      // Create container
-      const createOptions: Dockerode.ContainerCreateOptions = {
-        Image: imageName,
-        name: container.name,
-        Env: container.environment ? Object.entries(container.environment).map(([key, value]) => `${key}=${value}`) : undefined,
-        Cmd: container.command ? this.parseCommand(container.command) : undefined,
-        Entrypoint: container.entrypoint ? this.parseCommand(container.entrypoint) : undefined,
-        WorkingDir: container.workdir,
-        HostConfig: {
-          Binds: binds.length > 0 ? binds : undefined,
-          PortBindings: Object.keys(portBindings).length > 0 ? portBindings : undefined,
-          RestartPolicy: container.restart_policy ? {
-            Name: container.restart_policy,
-            MaximumRetryCount: container.restart_policy === 'on-failure' ? 3 : undefined
-          } : undefined,
-          NetworkMode: container.network,
-          // Add PID mode to get host's PID namespace
-          PidMode: 'host' 
-        },
-        ExposedPorts: Object.keys(exposedPorts).length > 0 ? exposedPorts : undefined,
-        Volumes: Object.keys(volumes).length > 0 ? volumes : undefined,
-        Healthcheck: container.healthcheck ? {
-          Test: ['CMD-SHELL', container.healthcheck.command],
-          Interval: container.healthcheck.interval ? parseInt(container.healthcheck.interval) * 1000000000 : undefined,
-          Timeout: container.healthcheck.timeout ? parseInt(container.healthcheck.timeout) * 1000000000 : undefined,
-          Retries: container.healthcheck.retries,
-          StartPeriod: container.healthcheck.start_period ? parseInt(container.healthcheck.start_period) * 1000000000 : undefined
-        } : undefined
-      };
-      
-      // Check if image exists locally, pull if not
-      try {
-        await this.docker.getImage(imageName).inspect();
-        this.outputChannel.appendLine(`Image found locally: ${imageName}`);
-      } catch (error) {
-        // Image not found, pull it
-        this.outputChannel.appendLine(`Pulling image: ${imageName}`);
-        
-        if (jobId) {
-          this.jobOutputService.appendOutput(jobId, `Pulling image: ${imageName}...\n`);
+          continue;
         }
         
-        const stream = await this.docker.pull(imageName);
-        await new Promise((resolve, reject) => {
-          this.docker.modem.followProgress(
-            stream,
-            (err: any, output: any[]) => err ? reject(err) : resolve(output),
-            (event: any) => {
-              if (event.progress) {
-                const message = `${event.id}: ${event.status} ${event.progress}`;
-                this.outputChannel.appendLine(message);
-                
-                if (jobId) {
-                  this.jobOutputService.appendOutput(jobId, `${message}\n`);
-                }
-              } else if (event.id) {
-                const message = `${event.id}: ${event.status}`;
-                this.outputChannel.appendLine(message);
-                
-                if (jobId) {
-                  this.jobOutputService.appendOutput(jobId, `${message}\n`);
-                }
-              } else {
-                this.outputChannel.appendLine(event.status);
-                
-                if (jobId) {
-                  this.jobOutputService.appendOutput(jobId, `${event.status}\n`);
-                }
+        const mode = vol.readonly ? 'ro' : 'rw';
+        binds.push(`${source}:${vol.target}:${mode}`);
+        volumes[vol.target] = {};
+      }
+    }
+    
+    // Parse ports
+    const exposedPorts: { [key: string]: {} } = {};
+    const portBindings: Dockerode.PortMap = {};
+    
+    if (container.ports) {
+      for (const port of container.ports) {
+        const containerPort = typeof port.container === 'number' ? `${port.container}/tcp` : port.container;
+        exposedPorts[containerPort] = {};
+        
+        const hostBinding = {
+          HostPort: typeof port.host === 'number' ? `${port.host}` : port.host
+        };
+        
+        portBindings[containerPort] = [hostBinding];
+      }
+    }
+    
+    // Create container
+    const createOptions: Dockerode.ContainerCreateOptions = {
+      Image: imageName,
+      name: container.name,
+      Env: container.environment ? Object.entries(container.environment).map(([key, value]) => `${key}=${value}`) : undefined,
+      Cmd: container.command ? this.parseCommand(container.command) : undefined,
+      Entrypoint: container.entrypoint ? this.parseCommand(container.entrypoint) : undefined,
+      WorkingDir: container.workdir,
+      HostConfig: {
+        Binds: binds.length > 0 ? binds : undefined,
+        PortBindings: Object.keys(portBindings).length > 0 ? portBindings : undefined,
+        RestartPolicy: container.restart_policy ? {
+          Name: container.restart_policy,
+          MaximumRetryCount: container.restart_policy === 'on-failure' ? 3 : undefined
+        } : undefined,
+        NetworkMode: container.network,
+        // Add PID mode to get host's PID namespace
+        PidMode: 'host' 
+      },
+      ExposedPorts: Object.keys(exposedPorts).length > 0 ? exposedPorts : undefined,
+      Volumes: Object.keys(volumes).length > 0 ? volumes : undefined,
+      Healthcheck: container.healthcheck ? {
+        Test: ['CMD-SHELL', container.healthcheck.command],
+        Interval: container.healthcheck.interval ? parseInt(container.healthcheck.interval) * 1000000000 : undefined,
+        Timeout: container.healthcheck.timeout ? parseInt(container.healthcheck.timeout) * 1000000000 : undefined,
+        Retries: container.healthcheck.retries,
+        StartPeriod: container.healthcheck.start_period ? parseInt(container.healthcheck.start_period) * 1000000000 : undefined
+      } : undefined
+    };
+    
+    // Check if image exists locally, pull if not
+    try {
+      await this.docker.getImage(imageName).inspect();
+      this.outputChannel.appendLine(`Image found locally: ${imageName}`);
+    } catch (error) {
+      // Image not found, pull it
+      this.outputChannel.appendLine(`Pulling image: ${imageName}`);
+      
+      if (jobId) {
+        this.jobOutputService.appendOutput(jobId, `Pulling image: ${imageName}...\n`);
+      }
+      
+      const stream = await this.docker.pull(imageName);
+      await new Promise((resolve, reject) => {
+        this.docker.modem.followProgress(
+          stream,
+          (err: any, output: any[]) => err ? reject(err) : resolve(output),
+          (event: any) => {
+            if (event.progress) {
+              const message = `${event.id}: ${event.status} ${event.progress}`;
+              this.outputChannel.appendLine(message);
+              
+              if (jobId) {
+                this.jobOutputService.appendOutput(jobId, `${message}\n`);
+              }
+            } else if (event.id) {
+              const message = `${event.id}: ${event.status}`;
+              this.outputChannel.appendLine(message);
+              
+              if (jobId) {
+                this.jobOutputService.appendOutput(jobId, `${message}\n`);
+              }
+            } else {
+              this.outputChannel.appendLine(event.status);
+              
+              if (jobId) {
+                this.jobOutputService.appendOutput(jobId, `${event.status}\n`);
               }
             }
-          );
-        });
-        
-        this.outputChannel.appendLine(`Image pulled: ${imageName}`);
-      }
-      
-      this.outputChannel.appendLine(`Creating container: ${container.name}`);
-      const containerInstance = await this.docker.createContainer(createOptions);
-      const containerId = containerInstance.id;
-      
-      this.outputChannel.appendLine(`Starting container: ${container.name} (${containerId})`);
-      await containerInstance.start();
-      
-      // Store running container reference
-      this.runningContainers.set(container.name, containerInstance);
-      
-      // For one-off commands that exit quickly, wait for the container to complete
-      // and capture the output
-      if (container.command) {
-        // Output a message that we're running the command
-        this.outputChannel.appendLine(`\n[COMMAND] ${container.command}`);
-        
-        // Wait for the container to exit without a timeout
-        // We're removing the 30-second timeout to allow containers to run as long as needed
-        const containerExitData = await containerInstance.wait();
-        
-        // Get the logs immediately after the container has exited
-        const logStream = await containerInstance.logs({
-          follow: false,
-          stdout: true,
-          stderr: true,
-          tail: -1  // Use -1 to get all logs
-        });
-        
-        // Clean the logs before displaying or processing
-        const rawLogs = logStream.toString();
-        const logs = this.cleanDockerOutput(rawLogs);
-        
-        // Store the logs for this container
-        this.containerLogs.set(container.name, logs);
-        
-        this.outputChannel.appendLine(`\n[OUTPUT]`);
-        this.outputChannel.appendLine(logs);
-        
-        if (jobId) {
-          this.jobOutputService.appendOutput(jobId, logs);
-        }
-      }
-      
-      // Record end time
-      const endTime = new Date();
-      const executionTime = (endTime.getTime() - startTime.getTime()) / 1000;
-      this.outputChannel.appendLine(`\nContainer started at: ${endTime.toLocaleTimeString()}`);
-      this.outputChannel.appendLine(`Startup time: ${executionTime.toFixed(2)}s`);
-      this.outputChannel.appendLine(`Status: Running`);
-      this.outputChannel.appendLine('─'.repeat(80)); // Separator line
-      
-      vscode.window.showInformationMessage(`Container started: ${container.name}`);
-      
-      // Mark job as complete in WebView if available
-      if (jobId) {
-        this.jobOutputService.completeJobSuccess(jobId);
-      }
-      
-      // If container was configured to remove after run and has a command, clean it up
-      if (container.remove_when_stopped && container.command) {
-        try {
-          // Check if container has exited
-          const info = await containerInstance.inspect();
-          if (info.State.Status === 'exited' || info.State.Status === 'created') {
-            this.outputChannel.appendLine(`\nRemoving container after completion: ${container.name}`);
-            await containerInstance.remove();
-            this.runningContainers.delete(container.name);
           }
-        } catch (cleanupError) {
-          this.outputChannel.appendLine(`\n[WARNING] Failed to cleanup container: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
-        }
-      }
+        );
+      });
       
-      // Get the container info including PID
-      const containerInfo = await containerInstance.inspect();
-      const containerPid = containerInfo.State?.Pid;
-      
-      // Register the PID with job output service if available
-      if (containerPid && containerPid > 0 && jobId && this.jobOutputService) {
-        this.jobOutputService.registerPid(jobId, containerPid);
-        this.outputChannel.appendLine(`[INFO] Container PID: ${containerPid}`);
-        this.outputChannel.appendLine(`[INFO] Registered PID ${containerPid} for job ${jobId}`);
-      }
-      
-      const successMessage = `Container ${container.name} started successfully`;
-      this.outputChannel.appendLine(`[SUCCESS] ${successMessage}`);
-      
-      return {
-        success: true,
-        output: this.containerLogs.get(container.name) || `Container ${container.name} started with ID: ${containerId}`,
-        containerId
-      };
-    } catch (error) {
-      // Handle execution error
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.outputChannel.appendLine(`\n[ERROR] ${errorMessage}`);
-      
-      // Record end time
-      const endTime = new Date();
-      const executionTime = (endTime.getTime() - startTime.getTime()) / 1000;
-      this.outputChannel.appendLine(`\nFailed at: ${endTime.toLocaleTimeString()}`);
-      this.outputChannel.appendLine(`Execution time: ${executionTime.toFixed(2)}s`);
-      this.outputChannel.appendLine('─'.repeat(80)); // Separator line
-      
-      vscode.window.showErrorMessage(`Failed to start container: ${container.name}`);
-      
-      // Mark job as failed in WebView if available
-      if (jobId) {
-        this.jobOutputService.appendError(jobId, errorMessage);
-        this.jobOutputService.completeJobFailure(jobId);
-      }
-      
-      return {
-        success: false,
-        output: '',
-        error: errorMessage
-      };
+      this.outputChannel.appendLine(`Image pulled: ${imageName}`);
     }
+    
+    this.outputChannel.appendLine(`Creating container: ${container.name}`);
+    const containerInstance = await this.docker.createContainer(createOptions);
+    const containerId = containerInstance.id;
+    
+    this.outputChannel.appendLine(`Starting container: ${container.name} (${containerId})`);
+    await containerInstance.start();
+    
+    // Store running container reference
+    this.runningContainers.set(container.name, containerInstance);
+    
+    // For one-off commands that exit quickly, wait for the container to complete
+    // and capture the output
+    if (container.command) {
+      // Output a message that we're running the command
+      this.outputChannel.appendLine(`\n[COMMAND] ${container.command}`);
+      
+      // Wait for the container to exit without a timeout
+      // We're removing the 30-second timeout to allow containers to run as long as needed
+      const containerExitData = await containerInstance.wait();
+      
+      // Get the logs immediately after the container has exited
+      const logStream = await containerInstance.logs({
+        follow: false,
+        stdout: true,
+        stderr: true,
+        tail: -1  // Use -1 to get all logs
+      });
+      
+      // Clean the logs before displaying or processing
+      const rawLogs = logStream.toString();
+      const logs = this.cleanDockerOutput(rawLogs);
+      
+      // Store the logs for this container
+      this.containerLogs.set(container.name, logs);
+      
+      this.outputChannel.appendLine(`\n[OUTPUT]`);
+      this.outputChannel.appendLine(logs);
+      
+      if (jobId) {
+        this.jobOutputService.appendOutput(jobId, logs);
+      }
+    }
+    
+    // Record end time
+    const endTime = new Date();
+    const executionTime = (endTime.getTime() - startTime.getTime()) / 1000;
+    this.outputChannel.appendLine(`\nContainer started at: ${endTime.toLocaleTimeString()}`);
+    this.outputChannel.appendLine(`Startup time: ${executionTime.toFixed(2)}s`);
+    this.outputChannel.appendLine(`Status: Running`);
+    this.outputChannel.appendLine('─'.repeat(80)); // Separator line
+    
+    vscode.window.showInformationMessage(`Container started: ${container.name}`);
+    
+    // Mark job as complete in WebView if available
+    if (jobId) {
+      this.jobOutputService.completeJobSuccess(jobId);
+    }
+    
+    // If container was configured to remove after run and has a command, clean it up
+    if (container.remove_when_stopped && container.command) {
+      try {
+        // Check if container has exited
+        const info = await containerInstance.inspect();
+        if (info.State.Status === 'exited' || info.State.Status === 'created') {
+          this.outputChannel.appendLine(`\nRemoving container after completion: ${container.name}`);
+          await containerInstance.remove();
+          this.runningContainers.delete(container.name);
+        }
+      } catch (cleanupError) {
+        this.outputChannel.appendLine(`\n[WARNING] Failed to cleanup container: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+      }
+    }
+    
+    // Get the container info including PID
+    const containerInfo = await containerInstance.inspect();
+    const containerPid = containerInfo.State?.Pid;
+    
+    // Register the PID with job output service if available
+    if (containerPid && containerPid > 0 && jobId && this.jobOutputService) {
+      this.jobOutputService.registerPid(jobId, containerPid);
+      this.outputChannel.appendLine(`[INFO] Container PID: ${containerPid}`);
+      this.outputChannel.appendLine(`[INFO] Registered PID ${containerPid} for job ${jobId}`);
+    }
+    
+    const successMessage = `Container ${container.name} started successfully`;
+    this.outputChannel.appendLine(`[SUCCESS] ${successMessage}`);
+    
+    return {
+      success: true,
+      output: this.containerLogs.get(container.name) || `Container ${container.name} started with ID: ${containerId}`,
+      containerId
+    };
   }
 
   /**
@@ -812,4 +795,4 @@ export class DockerRunner {
     
     return result;
   }
-} 
+}

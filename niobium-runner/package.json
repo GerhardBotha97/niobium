@@ -1,6 +1,6 @@
 {
-  "name": "niobium-runner",
-  "displayName": "Niobium Runner",
+  "name": "niobium",
+  "displayName": "Niobium",
   "description": "Configurable command runner using .niobium.yml files",
   "version": "0.0.1",
   "engines": {
@@ -594,9 +594,9 @@
     "js-yaml": "^4.1.0",
     "minimatch": "^6.2.0"
   },
-  "publisher": "niobiumrunner",
+  "publisher": "niobium",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/niobium-runner.git"
+    "url": "https://github.com/GerhardBotha97/niobium.git"
   }
 }
