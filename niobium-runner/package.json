@@ -3,6 +3,7 @@
   "displayName": "Niobium",
   "description": "Configurable command runner using .niobium.yml files",
   "version": "0.0.1",
+  "icon": "media/niobium-icon.png",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -54,14 +55,14 @@
         {
           "id": "niobium-sidebar",
           "title": "Niobium",
-          "icon": "media/wasp-icon.svg"
+          "icon": "media/niobium-icon.png"
         }
       ],
       "panel": [
         {
           "id": "niobium-panel-container",
           "title": "Niobium",
-          "icon": "media/wasp-icon.svg"
+          "icon": "media/niobium-icon.png"
         }
       ]
     },
@@ -70,21 +71,21 @@
         {
           "id": "niobium-dashboard",
           "name": "Dashboard",
-          "icon": "media/wasp-icon.svg",
+          "icon": "media/niobium-icon.png",
           "contextualTitle": "Niobium Dashboard",
           "when": "workbenchState != empty"
         },
         {
           "id": "niobium-container",
           "name": "Containers",
-          "icon": "media/wasp-icon.svg",
+          "icon": "media/niobium-icon.png",
           "contextualTitle": "Docker Containers",
           "when": "workbenchState != empty"
         },
         {
           "id": "niobium-file-watchers",
           "name": "File Watchers",
-          "icon": "media/wasp-icon.svg",
+          "icon": "media/niobium-icon.png",
           "contextualTitle": "File Watchers",
           "when": "workbenchState != empty"
         }
@@ -93,7 +94,7 @@
         {
           "id": "niobium-results-view",
           "name": "Niobium",
-          "icon": "media/wasp-icon.svg"
+          "icon": "media/niobium-icon.png"
         }
       ]
     },
@@ -389,20 +390,13 @@
         "icon": "$(cloud-download)"
       }
     ],
-    "iconThemes": [
-      {
-        "id": "niobium-icons",
-        "label": "Niobium Icons",
-        "path": "./themes/niobium-icons.json"
-      }
-    ],
     "iconFonts": [
       {
         "id": "niobium-font",
         "src": [
           {
-            "path": "./media/wasp-icon.svg",
-            "format": "svg"
+            "path": "./media/niobium-icon.png",
+            "format": "png"
           }
         ]
       }

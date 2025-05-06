@@ -34,21 +34,28 @@ Create a `.niobium.yml` file in your project with a structure like this:
 
 ```yaml
 commands:
-  build:
-    cmd: npm run build
-    description: Build the project
-  test:
-    cmd: npm run test
-    description: Run tests
+  - name: hello
+    description: Print a hello message
+    command: echo "Hello, World!"
 
+  - name: list-files
+    description: List files in the current directory
+    command: ls -la
+
+# Define stages
 stages:
-  dev:
-    - build
-    - test
+  - name: basic-stage
+    description: A basic stage with multiple commands
+    commands:
+      - hello
+      - list-files
 
+# Define sequences
 sequences:
-  full-pipeline:
-    - dev
+  - name: basic-sequence
+    description: A basic sequence with one stage
+    stages:
+      - basic-stage
 ```
 
 ## Command Palette

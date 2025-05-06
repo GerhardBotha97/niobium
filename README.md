@@ -60,25 +60,29 @@ ext install niobium-runner
 Create a `.niobium.yml` file in your project root:
 
 ```yaml
-variables:
-  PROJECT_NAME: myproject
-  VERSION: 1.0.0
-
 commands:
-  hello:
-    description: Say hello
-    command: echo "Hello from Niobium!"
-  
-  build:
-    description: Build the project
-    command: echo "Building ${PROJECT_NAME} v${VERSION}"
+  - name: hello
+    description: Print a hello message
+    command: echo "Hello, World!"
 
+  - name: list-files
+    description: List files in the current directory
+    command: ls -la
+
+# Define stages
 stages:
-  setup:
-    description: Setup stage
+  - name: basic-stage
+    description: A basic stage with multiple commands
     commands:
       - hello
-      - build
+      - list-files
+
+# Define sequences
+sequences:
+  - name: basic-sequence
+    description: A basic sequence with one stage
+    stages:
+      - basic-stage
 ```
 
 ### 2. Run Commands
