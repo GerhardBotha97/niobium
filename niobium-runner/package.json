@@ -2,7 +2,7 @@
   "name": "niobium",
   "displayName": "Niobium",
   "description": "Configurable command runner using .niobium.yml files",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "icon": "media/niobium-icon.png",
   "engines": {
     "vscode": "^1.60.0"
@@ -588,7 +588,7 @@
     "js-yaml": "^4.1.0",
     "minimatch": "^6.2.0"
   },
-  "publisher": "niobium",
+  "publisher": "gerbot",
   "repository": {
     "type": "git",
     "url": "https://github.com/GerhardBotha97/niobium.git"
