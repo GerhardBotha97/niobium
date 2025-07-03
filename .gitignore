@@ -2,3 +2,5 @@ dist/
 node_modules/
 .vscode/
 .env
+.niobium.yml
+/niobium-runner/*.vsix

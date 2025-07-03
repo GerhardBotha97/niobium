@@ -4,6 +4,7 @@ import { DockerContainerConfig } from './configProvider';
 import { JobOutputService } from './ui/jobOutputService';
 import { IgnoreProvider } from './utils/ignoreUtils';
 import * as path from 'path';
+import * as fs from 'fs';
 import { sanitizeContainerName } from './utils/dockerUtils';
 
 // Interface to track Docker execution results
@@ -23,11 +24,19 @@ export class DockerRunner {
   private ignoreProvider: IgnoreProvider;
   private containerLogs: Map<string, string> = new Map(); // Store logs for each container
 
-  constructor(context?: vscode.ExtensionContext) {
-    this.docker = new Dockerode();
+  constructor(context?: vscode.ExtensionContext, socketPath?: string) {
+    const validatedSocketPath = this.validateSocketPath(socketPath) || this.getDefaultSocketPath();
+    this.docker = new Dockerode(validatedSocketPath ? { socketPath: validatedSocketPath } : undefined);
     this.outputChannel = vscode.window.createOutputChannel('Niobium Docker');
     this.jobOutputService = context ? JobOutputService.getInstance(context) : null as any;
     this.ignoreProvider = IgnoreProvider.getInstance();
+  }
+
+  private getDefaultSocketPath(): string | undefined {
+    if (process.platform === 'darwin') {
+      return path.join(process.env.HOME || '', '.rd/docker.sock');
+    }
+    return '/var/run/docker.sock';
   }
 
   /**
@@ -760,6 +769,15 @@ export class DockerRunner {
    * Parse a command string properly handling quotes
    * This properly handles commands with quoted arguments
    */
+  private validateSocketPath(path?: string): string | undefined {
+    if (!path) return undefined;
+    try {
+      return fs.existsSync(path) ? path : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private parseCommand(commandStr: string): string[] {
     const result: string[] = [];
     let current = '';
